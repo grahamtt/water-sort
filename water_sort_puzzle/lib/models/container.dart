@@ -152,6 +152,39 @@ class Container {
     return topContinuous;
   }
   
+  /// Remove a specific volume of liquid from the top of the container
+  /// Returns the liquid layer that was removed, or null if not possible
+  LiquidLayer? removeSpecificVolume(LiquidColor color, int volume) {
+    if (isEmpty || topColor != color) return null;
+    
+    int volumeToRemove = volume;
+    final removedLayers = <LiquidLayer>[];
+    
+    // Remove layers from top down until we've removed the required volume
+    while (volumeToRemove > 0 && !isEmpty && topColor == color) {
+      final currentTop = liquidLayers.last;
+      
+      if (currentTop.volume <= volumeToRemove) {
+        // Remove entire layer
+        final removed = liquidLayers.removeLast();
+        removedLayers.add(removed);
+        volumeToRemove -= removed.volume;
+      } else {
+        // Split the layer
+        final split = currentTop.split(volumeToRemove);
+        liquidLayers[liquidLayers.length - 1] = split[0]; // Keep remaining part
+        removedLayers.add(split[1]); // Add removed part
+        volumeToRemove = 0;
+      }
+    }
+    
+    // Combine all removed layers into one
+    if (removedLayers.isEmpty) return null;
+    
+    int totalVolume = removedLayers.fold(0, (sum, layer) => sum + layer.volume);
+    return LiquidLayer(color: color, volume: totalVolume);
+  }
+  
   /// Get a list of all unique colors in the container from bottom to top
   List<LiquidColor> get uniqueColors {
     return liquidLayers.map((layer) => layer.color).toSet().toList();

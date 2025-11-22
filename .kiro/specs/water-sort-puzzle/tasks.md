@@ -15,7 +15,7 @@
   - Write unit tests for all data model operations
   - _Requirements: 1.1, 1.2, 1.3_
 
-- [ ] 3. Create game state management system
+- [x] 3. Create game state management system
 
   - Implement GameState class with move history tracking
   - Create Move class for undo/redo functionality
@@ -23,7 +23,7 @@
   - Write unit tests for state transitions and validation
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 4. Build core game engine with move validation
+- [x] 4. Build core game engine with move validation
 
   - Create GameEngine abstract class and concrete implementation
   - Implement pour validation logic (color matching, container capacity)
@@ -32,7 +32,7 @@
   - Write comprehensive unit tests for all game rules
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2, 3.3, 3.4, 3.5_
 
-- [ ] 5. Implement undo/redo functionality
+- [x] 5. Implement undo/redo functionality
 
   - Add move history management to GameEngine
   - Implement undo operation with state restoration
@@ -41,7 +41,7 @@
   - Write unit tests for undo/redo edge cases
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 6. Create level management system
+- [x] 6. Create level management system
 
   - Implement Level class with difficulty parameters
   - Create LevelGenerator for procedural level creation
