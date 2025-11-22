@@ -1,34 +1,42 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:math' as math;
 import 'pour_animation.dart';
+import 'animation_queue.dart';
 
 /// Controller for managing pour animations with realistic liquid physics
+/// Integrates with AnimationQueue for non-blocking animation system
 class PourAnimationController extends ChangeNotifier {
   AnimationController? _animationController;
-  PourAnimation? _currentAnimation;
-  AnimationState _state = const IdleState();
+  final AnimationQueue _animationQueue = AnimationQueue();
   PourAnimationProgress _progress = PourAnimationProgress.start();
+  StreamSubscription<AnimationEvent>? _animationEventSubscription;
   
   // Animation curves for different phases
   late Animation<double> _pourCurve;
   late Animation<double> _streamCurve;
   late Animation<double> _splashCurve;
   
+  /// Access to the animation queue
+  AnimationQueue get animationQueue => _animationQueue;
+  
   /// Current animation state
-  AnimationState get state => _state;
+  AnimationState get state => _animationQueue.state;
   
   /// Current animation progress
   PourAnimationProgress get progress => _progress;
   
   /// Whether an animation is currently playing
-  bool get isAnimating => _state is PouringState;
+  bool get isAnimating => _animationQueue.isAnimating;
   
   /// Current animation data (null if not animating)
-  PourAnimation? get currentAnimation => _currentAnimation;
+  PourAnimation? get currentAnimation => _animationQueue.currentAnimation;
   
   /// Initialize the controller with a TickerProvider
   void initialize(TickerProvider tickerProvider) {
     _animationController?.dispose();
+    _animationEventSubscription?.cancel();
+    
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: tickerProvider,
@@ -37,6 +45,9 @@ class PourAnimationController extends ChangeNotifier {
     _setupAnimationCurves();
     _animationController!.addListener(_onAnimationUpdate);
     _animationController!.addStatusListener(_onAnimationStatusChange);
+    
+    // Listen to animation queue events
+    _animationEventSubscription = _animationQueue.animationEvents.listen(_handleAnimationEvent);
   }
   
   void _setupAnimationCurves() {
@@ -61,56 +72,120 @@ class PourAnimationController extends ChangeNotifier {
     );
   }
   
-  /// Start a pour animation
-  Future<void> startPourAnimation(PourAnimation animation) async {
-    if (isAnimating) {
-      await stopAnimation();
+  /// Add a pour animation to the queue
+  void addPourAnimation(PourAnimation animation) {
+    _animationQueue.addAnimation(animation);
+  }
+  
+  /// Add multiple pour animations to the queue
+  void addPourAnimations(List<PourAnimation> animations) {
+    _animationQueue.addAnimations(animations);
+  }
+  
+  /// Skip the current animation
+  void skipCurrentAnimation() {
+    _animationQueue.skipCurrentAnimation();
+  }
+  
+  /// Skip all animations
+  void skipAllAnimations() {
+    _animationQueue.skipAllAnimations();
+  }
+  
+  /// Start victory celebration animation
+  void startVictoryAnimation({Duration duration = const Duration(milliseconds: 2000)}) {
+    _animationQueue.startVictoryAnimation(duration: duration);
+  }
+  
+  /// Complete victory animation
+  void completeVictoryAnimation() {
+    _animationQueue.completeVictoryAnimation();
+  }
+  
+  /// Handle animation queue events
+  void _handleAnimationEvent(AnimationEvent event) {
+    switch (event) {
+      case AnimationStarted(:final animation):
+        _startFlutterAnimation(animation);
+        break;
+      case AnimationCompleted(:final animation):
+        _completeFlutterAnimation();
+        break;
+      case AnimationSkipped(:final animation):
+        _skipFlutterAnimation();
+        break;
+      case VictoryAnimationStarted(:final duration):
+        _startVictoryFlutterAnimation(duration);
+        break;
+      case VictoryAnimationCompleted(:final duration):
+        _completeVictoryFlutterAnimation();
+        break;
+      case ForcedIdle():
+        _forceIdleFlutterAnimation();
+        break;
+      default:
+        // Handle other events if needed
+        break;
     }
-    
-    _currentAnimation = animation;
-    _state = PouringState(animation);
-    
+  }
+  
+  /// Start the Flutter animation for a pour
+  void _startFlutterAnimation(PourAnimation animation) {
     if (_animationController != null) {
       _animationController!.duration = animation.duration;
       _setupAnimationCurves();
-      await _animationController!.forward(from: 0.0);
+      _animationController!.forward(from: 0.0);
     }
-    
-    notifyListeners();
   }
   
-  /// Stop the current animation
-  Future<void> stopAnimation() async {
-    if (_animationController != null && _animationController!.isAnimating) {
-      _animationController!.stop();
+  /// Complete the current Flutter animation
+  void _completeFlutterAnimation() {
+    if (_animationController != null) {
+      _animationController!.reset();
     }
-    
-    _currentAnimation = null;
-    _state = const IdleState();
     _progress = PourAnimationProgress.start();
     notifyListeners();
   }
   
-  /// Start victory celebration animation
-  Future<void> startVictoryAnimation({
-    Duration duration = const Duration(milliseconds: 2000),
-  }) async {
-    if (isAnimating) {
-      await stopAnimation();
+  /// Skip the current Flutter animation
+  void _skipFlutterAnimation() {
+    if (_animationController != null && _animationController!.isAnimating) {
+      _animationController!.stop();
+      _animationController!.reset();
     }
-    
-    _state = VictoryState(duration);
-    
+    _progress = PourAnimationProgress.start();
+    notifyListeners();
+  }
+  
+  /// Start victory Flutter animation
+  void _startVictoryFlutterAnimation(Duration duration) {
     if (_animationController != null) {
       _animationController!.duration = duration;
-      await _animationController!.forward(from: 0.0);
+      _animationController!.forward(from: 0.0);
     }
-    
+  }
+  
+  /// Complete victory Flutter animation
+  void _completeVictoryFlutterAnimation() {
+    if (_animationController != null) {
+      _animationController!.reset();
+    }
+    _progress = PourAnimationProgress.start();
+    notifyListeners();
+  }
+  
+  /// Force idle state for Flutter animation
+  void _forceIdleFlutterAnimation() {
+    if (_animationController != null) {
+      _animationController!.stop();
+      _animationController!.reset();
+    }
+    _progress = PourAnimationProgress.start();
     notifyListeners();
   }
   
   void _onAnimationUpdate() {
-    if (_animationController == null || _currentAnimation == null) return;
+    if (_animationController == null || currentAnimation == null) return;
     
     final progress = _animationController!.value;
     final pourProgress = _pourCurve.value;
@@ -124,7 +199,7 @@ class PourAnimationController extends ChangeNotifier {
     final streamWidth = _calculateStreamWidth(streamProgress);
     
     // Determine splash effects
-    final showSplash = progress > 0.6 && _currentAnimation!.showSplash;
+    final showSplash = progress > 0.6 && currentAnimation!.showSplash;
     final splashIntensity = showSplash ? splashProgress : 0.0;
     
     _progress = PourAnimationProgress(
@@ -135,28 +210,29 @@ class PourAnimationController extends ChangeNotifier {
       splashIntensity: splashIntensity,
     );
     
+    // Update animation queue with progress
+    _animationQueue.updateAnimationProgress(progress);
+    
     notifyListeners();
   }
   
   void _onAnimationStatusChange(AnimationStatus status) {
     if (status == AnimationStatus.completed) {
-      _currentAnimation = null;
-      _state = const IdleState();
-      _progress = PourAnimationProgress.start();
-      notifyListeners();
+      // Notify the animation queue that the current animation is complete
+      _animationQueue.completeCurrentAnimation();
     }
   }
   
   /// Calculate the position of the liquid stream using realistic physics
   Offset _calculateStreamPosition(double progress) {
-    if (_currentAnimation == null) return Offset.zero;
+    if (currentAnimation == null) return Offset.zero;
     
     // Simulate parabolic trajectory for liquid stream
     // This creates a realistic arc from source to target
     
     // Assume containers are positioned horizontally
-    final horizontalDistance = (_currentAnimation!.toContainer - 
-        _currentAnimation!.fromContainer).abs() * 100.0;
+    final horizontalDistance = (currentAnimation!.toContainer - 
+        currentAnimation!.fromContainer).abs() * 100.0;
     
     // Calculate horizontal position
     final x = progress * horizontalDistance;
@@ -173,7 +249,7 @@ class PourAnimationController extends ChangeNotifier {
   
   /// Calculate the width of the liquid stream based on physics
   double _calculateStreamWidth(double progress) {
-    if (_currentAnimation == null) return 0.0;
+    if (currentAnimation == null) return 0.0;
     
     // Stream starts narrow, widens in middle, then narrows again
     // This simulates realistic liquid flow
@@ -225,12 +301,12 @@ class PourAnimationController extends ChangeNotifier {
   
   /// Get the source position for pour animation
   Offset getSourcePosition(List<Offset> containerPositions, Size containerSize) {
-    if (_currentAnimation == null || 
-        _currentAnimation!.fromContainer >= containerPositions.length) {
+    if (currentAnimation == null || 
+        currentAnimation!.fromContainer >= containerPositions.length) {
       return Offset.zero;
     }
     
-    final containerPos = containerPositions[_currentAnimation!.fromContainer];
+    final containerPos = containerPositions[currentAnimation!.fromContainer];
     
     // Return position at top center of source container
     return Offset(
@@ -241,12 +317,12 @@ class PourAnimationController extends ChangeNotifier {
   
   /// Get the target position for pour animation
   Offset getTargetPosition(List<Offset> containerPositions, Size containerSize) {
-    if (_currentAnimation == null || 
-        _currentAnimation!.toContainer >= containerPositions.length) {
+    if (currentAnimation == null || 
+        currentAnimation!.toContainer >= containerPositions.length) {
       return Offset.zero;
     }
     
-    final containerPos = containerPositions[_currentAnimation!.toContainer];
+    final containerPos = containerPositions[currentAnimation!.toContainer];
     
     // Return position at top center of target container
     return Offset(
@@ -258,6 +334,8 @@ class PourAnimationController extends ChangeNotifier {
   @override
   void dispose() {
     _animationController?.dispose();
+    _animationEventSubscription?.cancel();
+    _animationQueue.dispose();
     super.dispose();
   }
 }

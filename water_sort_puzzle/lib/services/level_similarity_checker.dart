@@ -1,405 +1,217 @@
-import 'dart:math';
 import '../models/level.dart';
 import '../models/container.dart';
 import '../models/liquid_color.dart';
-import '../models/liquid_layer.dart';
 
 /// Service for detecting similarity between levels to ensure unique gameplay experiences
 class LevelSimilarityChecker {
-  /// Threshold for considering two levels as similar (80%)
+  /// Threshold for determining if two levels are too similar (80%)
   static const double similarityThreshold = 0.8;
-
-  /// Maximum attempts to generate a unique level before giving up
+  
+  /// Maximum number of attempts to generate a unique level
   static const int maxGenerationAttempts = 50;
 
   /// Check if two levels are similar based on structural patterns
+  /// Returns true if levels are too similar (above threshold)
   static bool areLevelsSimilar(Level level1, Level level2) {
-    // Quick checks first
-    if (level1.containerCount != level2.containerCount ||
-        level1.colorCount != level2.colorCount) {
-      return false;
-    }
-
-    // Compare structural patterns independent of specific colors
+    // Quick checks for obvious differences
+    if (level1.containerCount != level2.containerCount) return false;
+    if (level1.colorCount != level2.colorCount) return false;
+    
+    // Compare structural patterns independent of specific colors and container order
     final similarity = compareStructuralPatterns(level1, level2);
     return similarity >= similarityThreshold;
   }
 
-  /// Check if a level is similar to any level in a list
-  static bool isLevelSimilarToAny(Level newLevel, List<Level> existingLevels) {
-    for (final existingLevel in existingLevels) {
-      if (areLevelsSimilar(newLevel, existingLevel)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /// Generate a normalized signature for a level that is color-agnostic
+  /// Generate a normalized signature for a level that is color-agnostic and order-independent
   static String generateNormalizedSignature(Level level) {
+    // Create color-agnostic signature representing the level structure
     final containers = level.initialContainers;
     final normalizedContainers = normalizeColors(containers);
+    
+    // Sort patterns to make container order irrelevant for comparison
+    final sortedPatterns = List<String>.from(normalizedContainers)..sort();
 
-    // Create signature: "containers:4|pattern:ABAB,BABA,EMPTY,EMPTY"
-    return "containers:${containers.length}|pattern:${normalizedContainers.join(',')}";
+    return "containers:${containers.length}|colors:${level.colorCount}|pattern:${sortedPatterns.join(',')}";
   }
 
   /// Compare structural patterns between two levels
+  /// Returns similarity score from 0.0 (completely different) to 1.0 (identical)
   static double compareStructuralPatterns(Level level1, Level level2) {
-    // Normalize both levels to color-agnostic patterns
-    final pattern1 = _normalizeToPattern(level1);
-    final pattern2 = _normalizeToPattern(level2);
+    // Create canonical patterns for both levels using the same method as signature generation
+    final pattern1 = normalizeColors(level1.initialContainers);
+    final pattern2 = normalizeColors(level2.initialContainers);
 
-    // Calculate similarity score based on multiple factors
-    double similarity = 0.0;
-
-    // 1. Container arrangement similarity (40% weight)
-    final arrangementSimilarity = _calculateArrangementSimilarity(
-      pattern1,
-      pattern2,
-    );
-    similarity += arrangementSimilarity * 0.4;
-
-    // 2. Layer distribution similarity (30% weight)
-    final distributionSimilarity = _calculateDistributionSimilarity(
-      level1,
-      level2,
-    );
-    similarity += distributionSimilarity * 0.3;
-
-    // 3. Color mixing pattern similarity (30% weight)
-    final mixingSimilarity = _calculateMixingPatternSimilarity(
-      pattern1,
-      pattern2,
-    );
-    similarity += mixingSimilarity * 0.3;
-
-    return similarity;
+    // Calculate similarity score based on pattern matching
+    return calculatePatternSimilarity(pattern1, pattern2);
   }
 
-  /// Calculate similarity based on container arrangements
-  static double _calculateArrangementSimilarity(
-    List<String> pattern1,
-    List<String> pattern2,
-  ) {
+
+
+  /// Convert container patterns to normalized color representations
+  /// Returns list of pattern strings where colors are represented as A, B, C, etc.
+  static List<String> normalizeColors(List<Container> containers) {
+    // First pass: collect all unique colors and sort them for consistent mapping
+    final allColors = <LiquidColor>{};
+    for (final container in containers) {
+      for (final layer in container.liquidLayers) {
+        allColors.add(layer.color);
+      }
+    }
+    
+    // Sort colors by their enum index to ensure consistent mapping across different levels
+    final sortedColors = allColors.toList()..sort((a, b) => a.index.compareTo(b.index));
+    
+    // Create consistent color mapping
+    final colorMap = <LiquidColor, String>{};
+    for (int i = 0; i < sortedColors.length; i++) {
+      colorMap[sortedColors[i]] = String.fromCharCode('A'.codeUnitAt(0) + i);
+    }
+
+    // Convert to normalized patterns
+    return containers.map((container) {
+      if (container.isEmpty) return 'EMPTY';
+
+      final patternParts = <String>[];
+      for (final layer in container.liquidLayers) {
+        final colorLabel = colorMap[layer.color]!;
+        patternParts.add(colorLabel * layer.volume);
+      }
+      
+      return patternParts.join('');
+    }).toList();
+  }
+
+  /// Calculate similarity between two normalized patterns
+  /// Uses container order independence by sorting patterns before comparison
+  static double calculatePatternSimilarity(List<String> pattern1, List<String> pattern2) {
     if (pattern1.length != pattern2.length) return 0.0;
 
+    // Sort both patterns to make container order irrelevant
+    final sortedPattern1 = List<String>.from(pattern1)..sort();
+    final sortedPattern2 = List<String>.from(pattern2)..sort();
+
+    // Count exact matches
     int exactMatches = 0;
-    for (int i = 0; i < pattern1.length; i++) {
-      if (pattern1[i] == pattern2[i]) {
+    for (int i = 0; i < sortedPattern1.length; i++) {
+      if (sortedPattern1[i] == sortedPattern2[i]) {
         exactMatches++;
       }
     }
 
-    return exactMatches / pattern1.length;
+    // Calculate similarity as the percentage of exact matches
+    return exactMatches / sortedPattern1.length;
   }
 
-  /// Calculate similarity based on layer distribution patterns
-  static double _calculateDistributionSimilarity(Level level1, Level level2) {
-    // Compare distribution of liquid across containers
-    final dist1 = _getLayerDistribution(level1);
-    final dist2 = _getLayerDistribution(level2);
 
-    // Calculate similarity using normalized distributions
-    return _compareDistributions(dist1, dist2);
-  }
 
-  /// Calculate similarity based on color mixing patterns
-  static double _calculateMixingPatternSimilarity(
-    List<String> pattern1,
-    List<String> pattern2,
-  ) {
-    // Compare complexity patterns (number of segments, mixing levels)
-    final complexity1 = _calculateComplexityMetrics(pattern1);
-    final complexity2 = _calculateComplexityMetrics(pattern2);
-
-    return _compareComplexityMetrics(complexity1, complexity2);
-  }
-
-  /// Get layer distribution statistics for a level
-  static Map<String, double> _getLayerDistribution(Level level) {
-    final distribution = <String, double>{};
-    final totalContainers = level.containerCount;
-
-    // Count empty containers
-    int emptyCount = 0;
-    int singleColorCount = 0;
-    int multiColorCount = 0;
-
-    for (final container in level.initialContainers) {
-      if (container.isEmpty) {
-        emptyCount++;
-      } else if (container.isSorted) {
-        singleColorCount++;
-      } else {
-        multiColorCount++;
+  /// Validate that a level is sufficiently different from a list of existing levels
+  static bool isLevelUnique(Level newLevel, List<Level> existingLevels) {
+    for (final existingLevel in existingLevels) {
+      if (areLevelsSimilar(newLevel, existingLevel)) {
+        return false;
       }
     }
-
-    distribution['empty'] = emptyCount / totalContainers;
-    distribution['single'] = singleColorCount / totalContainers;
-    distribution['mixed'] = multiColorCount / totalContainers;
-
-    return distribution;
+    return true;
   }
 
-  /// Compare two distribution maps
-  static double _compareDistributions(
-    Map<String, double> dist1,
-    Map<String, double> dist2,
-  ) {
-    final keys = {...dist1.keys, ...dist2.keys};
-    double totalDifference = 0.0;
-
-    for (final key in keys) {
-      final val1 = dist1[key] ?? 0.0;
-      final val2 = dist2[key] ?? 0.0;
-      totalDifference += (val1 - val2).abs();
-    }
-
-    // Convert difference to similarity (1.0 - normalized difference)
-    return max(0.0, 1.0 - (totalDifference / 2.0));
+  /// Check if a level is similar to any level in a list of existing levels
+  /// Returns true if the level is similar to at least one existing level
+  static bool isLevelSimilarToAny(Level newLevel, List<Level> existingLevels) {
+    return !isLevelUnique(newLevel, existingLevels);
   }
 
-  /// Calculate complexity metrics for a pattern
-  static Map<String, double> _calculateComplexityMetrics(List<String> pattern) {
-    final metrics = <String, double>{};
-
-    // Count different pattern types
-    int emptyContainers = 0;
-    int singleColorContainers = 0;
-    int multiColorContainers = 0;
-    double totalSegments = 0.0;
-
-    for (final containerPattern in pattern) {
-      if (containerPattern == 'EMPTY') {
-        emptyContainers++;
-      } else {
-        final segments = countColorSegments(containerPattern);
-        totalSegments += segments;
-
-        if (segments == 1) {
-          singleColorContainers++;
-        } else {
-          multiColorContainers++;
-        }
-      }
-    }
-
-    final totalContainers = pattern.length;
-    metrics['empty_ratio'] = emptyContainers / totalContainers;
-    metrics['single_ratio'] = singleColorContainers / totalContainers;
-    metrics['multi_ratio'] = multiColorContainers / totalContainers;
-    metrics['avg_segments'] = totalContainers > 0
-        ? totalSegments / totalContainers
-        : 0.0;
-
-    return metrics;
-  }
-
-  /// Count color segments in a container pattern
-  static int countColorSegments(String containerPattern) {
-    if (containerPattern.isEmpty || containerPattern == 'EMPTY') return 0;
-
-    int segments = 1;
-    String? lastChar;
-
-    for (int i = 0; i < containerPattern.length; i++) {
-      final char = containerPattern[i];
-      if (char.isNotEmpty && char != lastChar && lastChar != null) {
-        segments++;
-      }
-      if (char.isNotEmpty) {
-        lastChar = char;
-      }
-    }
-
-    return segments;
-  }
-
-  /// Compare complexity metrics between two patterns
-  static double _compareComplexityMetrics(
-    Map<String, double> metrics1,
-    Map<String, double> metrics2,
-  ) {
-    final keys = {...metrics1.keys, ...metrics2.keys};
-    double totalDifference = 0.0;
-
-    for (final key in keys) {
-      final val1 = metrics1[key] ?? 0.0;
-      final val2 = metrics2[key] ?? 0.0;
-      totalDifference += (val1 - val2).abs();
-    }
-
-    // Convert difference to similarity
-    return max(0.0, 1.0 - (totalDifference / keys.length));
-  }
-
-  /// Convert level to normalized pattern representation
-  static List<String> _normalizeToPattern(Level level) {
-    return normalizeColors(level.initialContainers);
-  }
-
-  /// Convert containers to normalized color patterns
-  static List<String> normalizeColors(List<Container> containers) {
-    // Map to track color assignments (A, B, C, etc.)
-    final colorMap = <LiquidColor, String>{};
-    var nextColorLabel = 'A';
-
-    return containers.map((container) {
-      if (container.isEmpty) return 'EMPTY';
-
-      final layerPatterns = <String>[];
-
-      for (final layer in container.liquidLayers) {
-        // Assign normalized color label if not already assigned
-        if (!colorMap.containsKey(layer.color)) {
-          colorMap[layer.color] = nextColorLabel;
-          nextColorLabel = String.fromCharCode(
-            nextColorLabel.codeUnitAt(0) + 1,
-          );
-        }
-
-        // Add pattern for this layer (repeat label for volume)
-        final colorLabel = colorMap[layer.color]!;
-        layerPatterns.add(colorLabel * layer.volume);
-      }
-
-      return layerPatterns.join('');
-    }).toList();
-  }
-
-  /// Generate a detailed structural signature for debugging/analysis
-  static Map<String, dynamic> generateDetailedSignature(Level level) {
-    final normalizedPattern = normalizeColors(level.initialContainers);
-    final distribution = _getLayerDistribution(level);
-    final complexity = _calculateComplexityMetrics(normalizedPattern);
-
+  /// Get detailed similarity analysis between two levels for debugging
+  static Map<String, dynamic> getSimilarityAnalysis(Level level1, Level level2) {
+    final pattern1 = normalizeColors(level1.initialContainers);
+    final pattern2 = normalizeColors(level2.initialContainers);
+    final similarity = calculatePatternSimilarity(pattern1, pattern2);
+    
     return {
-      'container_count': level.containerCount,
-      'color_count': level.colorCount,
-      'normalized_pattern': normalizedPattern,
-      'distribution': distribution,
-      'complexity': complexity,
-      'signature': generateNormalizedSignature(level),
+      'similarity_score': similarity,
+      'is_similar': similarity >= similarityThreshold,
+      'threshold': similarityThreshold,
+      'level1_signature': generateNormalizedSignature(level1),
+      'level2_signature': generateNormalizedSignature(level2),
+      'level1_pattern': pattern1,
+      'level2_pattern': pattern2,
+      'sorted_pattern1': List<String>.from(pattern1)..sort(),
+      'sorted_pattern2': List<String>.from(pattern2)..sort(),
     };
   }
 
-  /// Calculate similarity score between two detailed signatures
-  static double calculateDetailedSimilarity(
-    Map<String, dynamic> sig1,
-    Map<String, dynamic> sig2,
-  ) {
-    // Quick structural checks
-    if (sig1['container_count'] != sig2['container_count'] ||
-        sig1['color_count'] != sig2['color_count']) {
-      return 0.0;
-    }
-
-    final pattern1 = List<String>.from(sig1['normalized_pattern']);
-    final pattern2 = List<String>.from(sig2['normalized_pattern']);
-
-    final dist1 = Map<String, double>.from(sig1['distribution']);
-    final dist2 = Map<String, double>.from(sig2['distribution']);
-
-    final comp1 = Map<String, double>.from(sig1['complexity']);
-    final comp2 = Map<String, double>.from(sig2['complexity']);
-
-    // Calculate weighted similarity
-    double similarity = 0.0;
-    similarity += _calculateArrangementSimilarity(pattern1, pattern2) * 0.4;
-    similarity += _compareDistributions(dist1, dist2) * 0.3;
-    similarity += _compareComplexityMetrics(comp1, comp2) * 0.3;
-
-    return similarity;
-  }
-
-  /// Validate that a level meets uniqueness requirements against a list
-  static bool validateLevelUniqueness(
-    Level candidateLevel,
-    List<Level> existingLevels, {
-    double? customThreshold,
-  }) {
-    final threshold = customThreshold ?? similarityThreshold;
-
-    for (final existingLevel in existingLevels) {
-      final similarity = compareStructuralPatterns(
-        candidateLevel,
-        existingLevel,
-      );
-      if (similarity >= threshold) {
-        return false; // Too similar to existing level
+  /// Check if a pattern represents a valid puzzle (not already solved)
+  static bool isPatternValid(List<String> pattern) {
+    // A pattern is invalid if it represents an already solved state
+    // (all non-empty containers have only one color type)
+    
+    for (final containerPattern in pattern) {
+      if (containerPattern == 'EMPTY') continue;
+      
+      // Check if container has mixed colors
+      final uniqueChars = containerPattern.split('').toSet();
+      if (uniqueChars.length > 1) {
+        return true; // Found mixed colors, so puzzle is not solved
       }
     }
-
-    return true; // Sufficiently unique
+    
+    // All containers are either empty or single-color (solved state)
+    return false;
   }
 
-  /// Find the most similar level in a list to a given level
-  static ({Level? level, double similarity}) findMostSimilarLevel(
-    Level targetLevel,
-    List<Level> candidateLevels,
-  ) {
-    Level? mostSimilar;
-    double highestSimilarity = 0.0;
-
-    for (final candidate in candidateLevels) {
-      final similarity = compareStructuralPatterns(targetLevel, candidate);
-      if (similarity > highestSimilarity) {
-        highestSimilarity = similarity;
-        mostSimilar = candidate;
-      }
-    }
-
-    return (level: mostSimilar, similarity: highestSimilarity);
+  /// Generate a hash code for a level pattern for efficient comparison
+  static int generatePatternHash(Level level) {
+    final signature = generateNormalizedSignature(level);
+    return signature.hashCode;
   }
 
-  /// Generate statistics about similarity within a level set
+  /// Analyze the similarity distribution within a set of levels
+  /// Returns analysis data about uniqueness and similarity patterns
   static Map<String, dynamic> analyzeLevelSetSimilarity(List<Level> levels) {
-    if (levels.length < 2) {
+    if (levels.isEmpty) {
       return {
-        'total_levels': levels.length,
-        'comparisons': 0,
-        'avg_similarity': 0.0,
-        'max_similarity': 0.0,
-        'min_similarity': 0.0,
-        'similar_pairs': 0,
+        'total_levels': 0,
+        'unique_levels': 0,
+        'similarity_pairs': 0,
+        'uniqueness_ratio': 1.0,
+        'analysis_summary': 'No levels to analyze',
       };
     }
 
-    final similarities = <double>[];
-    int similarPairs = 0;
-
-    // Compare each pair of levels
+    int similarityPairs = 0;
+    final signatures = <String>{};
+    
+    // Count unique signatures and similarity pairs
     for (int i = 0; i < levels.length; i++) {
+      final signature = generateNormalizedSignature(levels[i]);
+      signatures.add(signature);
+      
       for (int j = i + 1; j < levels.length; j++) {
-        final similarity = compareStructuralPatterns(levels[i], levels[j]);
-        similarities.add(similarity);
-
-        if (similarity >= similarityThreshold) {
-          similarPairs++;
+        if (areLevelsSimilar(levels[i], levels[j])) {
+          similarityPairs++;
         }
       }
     }
-
-    final avgSimilarity = similarities.isNotEmpty
-        ? similarities.reduce((a, b) => a + b) / similarities.length
-        : 0.0;
-
+    
+    final uniqueCount = signatures.length;
+    final uniquenessRatio = uniqueCount / levels.length;
+    
+    String summary;
+    if (uniquenessRatio >= 0.95) {
+      summary = 'Excellent uniqueness - levels are highly diverse';
+    } else if (uniquenessRatio >= 0.8) {
+      summary = 'Good uniqueness - most levels are unique';
+    } else if (uniquenessRatio >= 0.6) {
+      summary = 'Moderate uniqueness - some similar levels detected';
+    } else {
+      summary = 'Poor uniqueness - many similar levels detected';
+    }
+    
     return {
       'total_levels': levels.length,
-      'comparisons': similarities.length,
-      'avg_similarity': avgSimilarity,
-      'max_similarity': similarities.isNotEmpty
-          ? similarities.reduce(max)
-          : 0.0,
-      'min_similarity': similarities.isNotEmpty
-          ? similarities.reduce(min)
-          : 0.0,
-      'similar_pairs': similarPairs,
-      'uniqueness_ratio': similarPairs == 0
-          ? 1.0
-          : 1.0 - (similarPairs / similarities.length),
+      'unique_levels': uniqueCount,
+      'similarity_pairs': similarityPairs,
+      'uniqueness_ratio': uniquenessRatio,
+      'analysis_summary': summary,
     };
   }
 }

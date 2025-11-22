@@ -70,8 +70,8 @@ class _GameScreenState extends State<GameScreen> {
 
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      // Only update the UI if the widget is still mounted and not paused
-      if (mounted && !_isPaused) {
+      // Only update the UI if the widget is still mounted, not paused, and game is not completed
+      if (mounted && !_isPaused && !(_gameStateProvider.isVictory || _gameStateProvider.currentGameState?.isCompleted == true)) {
         setState(() {
           // This will trigger a rebuild and update the timer display
         });
@@ -500,6 +500,11 @@ class _GameScreenState extends State<GameScreen> {
   /// Get elapsed time since level start in a formatted string
   String _getElapsedTime() {
     if (_isPaused) return 'Paused';
+    
+    // If game is completed, show final time (don't continue counting)
+    if (_gameStateProvider.isVictory || _gameStateProvider.currentGameState?.isCompleted == true) {
+      return 'Completed';
+    }
     
     // Calculate total elapsed time minus paused time
     final totalElapsed = DateTime.now().difference(_levelStartTime);

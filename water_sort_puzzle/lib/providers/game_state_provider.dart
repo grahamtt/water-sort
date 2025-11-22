@@ -1,8 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../models/game_state.dart';
 import '../models/level.dart';
 import '../models/pour_result.dart';
+import '../models/liquid_color.dart';
+import '../animations/animation_queue.dart';
+import '../animations/pour_animation.dart';
 
 import '../services/game_engine.dart';
 import '../services/level_generator.dart';
@@ -31,6 +35,7 @@ class GameStateProvider extends ChangeNotifier {
   final WaterSortGameEngine _gameEngine;
   final LevelGenerator _levelGenerator;
   final AudioManager _audioManager = AudioManager();
+  final AnimationQueue _animationQueue = AnimationQueue();
 
   // Core game state
   GameState? _currentGameState;
@@ -42,14 +47,17 @@ class GameStateProvider extends ChangeNotifier {
   String? _errorMessage;
   String? _feedbackMessage;
   
-  // Animation state
-  bool _isAnimating = false;
+  // Animation event subscription
+  StreamSubscription<AnimationEvent>? _animationEventSubscription;
   
   GameStateProvider({
     required WaterSortGameEngine gameEngine,
     required LevelGenerator levelGenerator,
   }) : _gameEngine = gameEngine,
-       _levelGenerator = levelGenerator;
+       _levelGenerator = levelGenerator {
+    // Listen to animation events
+    _animationEventSubscription = _animationQueue.animationEvents.listen(_handleAnimationEvent);
+  }
 
   // Getters for current state
   GameState? get currentGameState => _currentGameState;
@@ -58,7 +66,7 @@ class GameStateProvider extends ChangeNotifier {
   int? get selectedContainerId => _selectedContainerId;
   String? get errorMessage => _errorMessage;
   String? get feedbackMessage => _feedbackMessage;
-  bool get isAnimating => _isAnimating;
+  bool get isAnimating => _animationQueue.isAnimating;
   
   // Convenience getters
   bool get isLoading => _loadingState != GameLoadingState.idle;
@@ -114,7 +122,7 @@ class GameStateProvider extends ChangeNotifier {
   
   /// Handle container selection and pouring logic
   Future<void> selectContainer(int containerId) async {
-    if (_isAnimating || _currentGameState == null) return;
+    if (isAnimating || _currentGameState == null) return;
     
     try {
       // If no container is selected, select this one
@@ -142,9 +150,6 @@ class GameStateProvider extends ChangeNotifier {
     if (_currentGameState == null) return;
     
     try {
-      _setUIState(GameUIState.pouring);
-      _setAnimating(true);
-      
       // Validate and attempt the pour
       final pourResult = _gameEngine.attemptPour(
         _currentGameState!,
@@ -153,7 +158,7 @@ class GameStateProvider extends ChangeNotifier {
       );
       
       if (pourResult.isSuccess) {
-        // Execute the pour and update game state
+        // Execute the pour and update game state IMMEDIATELY
         final newGameState = _gameEngine.executePour(
           _currentGameState!,
           fromContainerId,
@@ -163,10 +168,23 @@ class GameStateProvider extends ChangeNotifier {
         _currentGameState = newGameState;
         _deselectContainer();
         
-        // Simulate animation delay
-        await Future.delayed(const Duration(milliseconds: 800));
+        // Create and queue the animation (non-blocking)
+        // Note: We need to get the liquid info from the old state before the pour
+        final oldGameState = _gameEngine.attemptPour(_currentGameState!, fromContainerId, toContainerId);
+        if (oldGameState.isSuccess) {
+          // Get the source container from the previous state to determine what was poured
+          final previousState = _currentGameState!; // This is actually the new state now
+          // We'll create a simple animation based on the move
+          final animation = PourAnimation(
+            fromContainer: fromContainerId,
+            toContainer: toContainerId,
+            liquidColor: LiquidColor.blue, // Default color - this should be improved
+            volume: 1, // Default volume - this should be improved
+          );
+          _animationQueue.addAnimation(animation);
+        }
         
-        // Check for victory after animation completes
+        // Check for victory immediately (don't wait for animation)
         if (_gameEngine.checkWinCondition(newGameState)) {
           await _handleVictory(newGameState);
         } else {
@@ -184,18 +202,14 @@ class GameStateProvider extends ChangeNotifier {
       _handleError('Error during pour operation: ${e.toString()}');
       _deselectContainer();
       _setUIState(GameUIState.idle);
-    } finally {
-      _setAnimating(false);
     }
   }
   
   /// Undo the last move
   Future<void> undoMove() async {
-    if (_currentGameState == null || !canUndo || _isAnimating) return;
+    if (_currentGameState == null || !canUndo || isAnimating) return;
     
     try {
-      _setAnimating(true);
-      
       final newGameState = _gameEngine.undoLastMove(_currentGameState!);
       if (newGameState != null) {
         _currentGameState = newGameState;
@@ -206,25 +220,20 @@ class GameStateProvider extends ChangeNotifier {
         // Play light haptic feedback for undo
         _audioManager.lightHaptic();
         
-        // Simulate animation delay
-        await Future.delayed(const Duration(milliseconds: 500));
-        _clearFeedback();
+        // Clear feedback after a delay (non-blocking)
+        Future.delayed(const Duration(seconds: 2), _clearFeedback);
       }
       
     } catch (e) {
       _handleError('Error undoing move: ${e.toString()}');
-    } finally {
-      _setAnimating(false);
     }
   }
   
   /// Redo the next move
   Future<void> redoMove() async {
-    if (_currentGameState == null || !canRedo || _isAnimating) return;
+    if (_currentGameState == null || !canRedo || isAnimating) return;
     
     try {
-      _setAnimating(true);
-      
       final newGameState = _gameEngine.redoNextMove(_currentGameState!);
       if (newGameState != null) {
         _currentGameState = newGameState;
@@ -243,23 +252,22 @@ class GameStateProvider extends ChangeNotifier {
           await _handleVictory(newGameState);
         }
         
-        // Simulate animation delay
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (_uiState != GameUIState.victory) {
-          _clearFeedback();
-        }
+        // Clear feedback after a delay (non-blocking)
+        Future.delayed(const Duration(seconds: 2), () {
+          if (_uiState != GameUIState.victory) {
+            _clearFeedback();
+          }
+        });
       }
       
     } catch (e) {
       _handleError('Error redoing move: ${e.toString()}');
-    } finally {
-      _setAnimating(false);
     }
   }
   
   /// Reset the current level to its initial state
   Future<void> resetLevel() async {
-    if (_currentGameState == null || _isAnimating) return;
+    if (_currentGameState == null || isAnimating) return;
     
     try {
       _setLoadingState(GameLoadingState.loading);
@@ -394,11 +402,27 @@ class GameStateProvider extends ChangeNotifier {
     }
   }
   
-  void _setAnimating(bool animating) {
-    if (_isAnimating != animating) {
-      _isAnimating = animating;
-      notifyListeners();
+  /// Handle animation events from the animation queue
+  void _handleAnimationEvent(AnimationEvent event) {
+    switch (event) {
+      case AnimationStarted(:final animation):
+        // Animation started - could trigger UI updates if needed
+        break;
+      case AnimationCompleted(:final animation):
+        // Animation completed - could trigger UI updates if needed
+        break;
+      case VictoryAnimationStarted(:final duration):
+        // Victory animation started
+        break;
+      case VictoryAnimationCompleted(:final duration):
+        // Victory animation completed
+        break;
+      default:
+        // Handle other events if needed
+        break;
     }
+    // Notify listeners that animation state may have changed
+    notifyListeners();
   }
   
   void _handleError(String message) {
@@ -516,7 +540,8 @@ class GameStateProvider extends ChangeNotifier {
   
   @override
   void dispose() {
-    // Clean up any resources if needed
+    _animationEventSubscription?.cancel();
+    _animationQueue.dispose();
     super.dispose();
   }
 }

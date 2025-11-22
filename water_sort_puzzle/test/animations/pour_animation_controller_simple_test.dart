@@ -82,7 +82,7 @@ void main() {
         );
 
         // Start animation
-        controller.startPourAnimation(animation);
+        controller.addPourAnimation(animation);
         await tester.pump();
 
         // Verify state changed to pouring
@@ -119,8 +119,9 @@ void main() {
         final victoryState = controller.state as VictoryState;
         expect(victoryState.celebrationDuration, equals(duration));
 
-        // Complete animation quickly
-        await tester.pumpAndSettle();
+        // Complete victory animation manually
+        controller.completeVictoryAnimation();
+        await tester.pump();
 
         // Verify animation completed
         expect(controller.state, isA<IdleState>());
@@ -144,13 +145,13 @@ void main() {
         );
 
         // Start animation
-        controller.startPourAnimation(animation);
+        controller.addPourAnimation(animation);
         await tester.pump();
 
         expect(controller.isAnimating, isTrue);
 
         // Stop animation
-        await controller.stopAnimation();
+        controller.skipAllAnimations();
         await tester.pump();
 
         expect(controller.state, isA<IdleState>());

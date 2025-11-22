@@ -76,6 +76,8 @@ abstract class GameEngine {
   PourResult attemptPour(int fromContainer, int toContainer);
   bool undoLastMove();
   bool checkWinCondition();
+  bool checkLossCondition();
+  List<ValidMove> getValidMoves();
   GameState getCurrentState();
   Future<void> saveState();
   Future<GameState?> loadState();
@@ -118,6 +120,7 @@ class GameState {
   final List<Container> containers;
   final List<Move> moveHistory;
   final bool isCompleted;
+  final bool isLost;
   final int moveCount;
 
   GameState({
@@ -125,7 +128,22 @@ class GameState {
     required this.containers,
     required this.moveHistory,
     required this.isCompleted,
+    required this.isLost,
     required this.moveCount,
+  });
+}
+
+class ValidMove {
+  final int fromContainer;
+  final int toContainer;
+  final LiquidColor liquidColor;
+  final int volume;
+
+  ValidMove({
+    required this.fromContainer,
+    required this.toContainer,
+    required this.liquidColor,
+    required this.volume,
   });
 }
 
@@ -200,6 +218,71 @@ abstract class LevelGenerator {
   bool validateLevel(Level level);
   bool isLevelSimilar(Level newLevel, List<Level> previousLevels);
   String generateLevelSignature(Level level);
+  bool hasCompletedContainers(Level level);
+}
+
+class LevelValidator {
+  /// Validates that a generated level meets all requirements
+  static bool validateGeneratedLevel(Level level) {
+    return !_isAlreadySolved(level) &&
+           !_hasCompletedContainers(level) &&
+           _hasOptimalEmptySpace(level) &&
+           _isSolvable(level);
+  }
+
+  /// Checks if the level is already in a solved state
+  static bool _isAlreadySolved(Level level) {
+    // A level is solved if all non-empty containers contain only one color
+    for (final container in level.initialState) {
+      if (container.liquidLayers.isEmpty) continue;
+      
+      final firstColor = container.liquidLayers.first.color;
+      for (final layer in container.liquidLayers) {
+        if (layer.color != firstColor) {
+          return false; // Found mixed colors, not solved
+        }
+      }
+    }
+    return true; // All containers have single colors or are empty
+  }
+
+  /// Checks if any containers are already completed (single color and full)
+  static bool _hasCompletedContainers(Level level) {
+    for (final container in level.initialState) {
+      if (_isContainerCompleted(container)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Determines if a container is completed (single color and full capacity)
+  static bool _isContainerCompleted(Container container) {
+    if (container.liquidLayers.isEmpty) return false;
+    
+    // Check if container is full
+    final totalVolume = container.liquidLayers
+        .fold<int>(0, (sum, layer) => sum + layer.volume);
+    if (totalVolume != container.capacity) return false;
+    
+    // Check if all layers are the same color
+    final firstColor = container.liquidLayers.first.color;
+    return container.liquidLayers.every((layer) => layer.color == firstColor);
+  }
+
+  /// Validates optimal empty space (minimum needed to solve)
+  static bool _hasOptimalEmptySpace(Level level) {
+    // Implementation would calculate minimum empty containers/space needed
+    // This is a complex algorithm that depends on the specific level layout
+    return true; // Placeholder - actual implementation would be more complex
+  }
+
+  /// Checks if the level is solvable using automated solving algorithms
+  static bool _isSolvable(Level level) {
+    // Implementation would use backtracking or other solving algorithms
+    // to verify the level can be completed
+    return true; // Placeholder - actual implementation would be more complex
+  }
 }
 
 class Level {
@@ -225,7 +308,7 @@ class LevelSimilarityChecker {
   static const int maxGenerationAttempts = 50;
 
   static bool areLevelsSimilar(Level level1, Level level2) {
-    // Compare structural patterns independent of specific colors
+    // Compare structural patterns independent of specific colors and container order
     return _compareStructuralPatterns(level1, level2) > similarityThreshold;
   }
 
@@ -236,8 +319,9 @@ class LevelSimilarityChecker {
 
     // Calculate similarity score based on:
     // 1. Container count and arrangement
-    // 2. Layer distribution patterns
+    // 2. Layer distribution patterns  
     // 3. Color mixing patterns (independent of actual colors)
+    // 4. Container order independence (patterns can be reordered)
     return _calculatePatternSimilarity(pattern1, pattern2);
   }
 
@@ -245,10 +329,14 @@ class LevelSimilarityChecker {
     // Create color-agnostic signature representing the level structure
     // Format: "containers:4|pattern:ABAB,BABA,EMPTY,EMPTY"
     // Where A, B represent normalized color positions
+    // Patterns are sorted to make container order irrelevant
     final containers = level.initialState;
     final normalizedContainers = _normalizeColors(containers);
+    
+    // Sort patterns to make container order irrelevant for comparison
+    final sortedPatterns = List<String>.from(normalizedContainers)..sort();
 
-    return "containers:${containers.length}|pattern:${normalizedContainers.join(',')}";
+    return "containers:${containers.length}|pattern:${sortedPatterns.join(',')}";
   }
 
   static List<String> _normalizeColors(List<Container> containers) {
@@ -272,12 +360,16 @@ class LevelSimilarityChecker {
   static double _calculatePatternSimilarity(List<String> pattern1, List<String> pattern2) {
     if (pattern1.length != pattern2.length) return 0.0;
 
+    // Sort both patterns to make container order irrelevant
+    final sortedPattern1 = List<String>.from(pattern1)..sort();
+    final sortedPattern2 = List<String>.from(pattern2)..sort();
+
     int matches = 0;
-    for (int i = 0; i < pattern1.length; i++) {
-      if (pattern1[i] == pattern2[i]) matches++;
+    for (int i = 0; i < sortedPattern1.length; i++) {
+      if (sortedPattern1[i] == sortedPattern2[i]) matches++;
     }
 
-    return matches / pattern1.length;
+    return matches / sortedPattern1.length;
   }
 
   static List<String> _normalizeToPattern(Level level) {
@@ -318,6 +410,234 @@ class LevelGenerationService {
 
   void clearSessionHistory() {
     _sessionLevels.clear();
+  }
+}
+```
+
+### Loss Detection System
+
+**Move Validator and Loss Detector**
+
+```dart
+class MoveValidator {
+  static List<ValidMove> getAllValidMoves(List<Container> containers) {
+    final validMoves = <ValidMove>[];
+    
+    for (int fromIndex = 0; fromIndex < containers.length; fromIndex++) {
+      final fromContainer = containers[fromIndex];
+      final topLayer = fromContainer.getTopLayer();
+      
+      if (topLayer == null) continue; // Empty container, nothing to pour
+      
+      for (int toIndex = 0; toIndex < containers.length; toIndex++) {
+        if (fromIndex == toIndex) continue; // Can't pour to same container
+        
+        final toContainer = containers[toIndex];
+        
+        if (_canPourTo(fromContainer, toContainer, topLayer)) {
+          final volume = _calculatePourVolume(fromContainer, toContainer, topLayer);
+          validMoves.add(ValidMove(
+            fromContainer: fromIndex,
+            toContainer: toIndex,
+            liquidColor: topLayer.color,
+            volume: volume,
+          ));
+        }
+      }
+    }
+    
+    return validMoves;
+  }
+  
+  static bool _canPourTo(Container from, Container to, LiquidLayer topLayer) {
+    // Check if target container has space
+    if (to.isFull) return false;
+    
+    // Check if colors match or target is empty
+    final toTopLayer = to.getTopLayer();
+    return toTopLayer == null || toTopLayer.color == topLayer.color;
+  }
+  
+  static int _calculatePourVolume(Container from, Container to, LiquidLayer topLayer) {
+    // Calculate how much of the top continuous color can be poured
+    int volume = 0;
+    final targetColor = topLayer.color;
+    
+    // Count continuous layers of same color from top
+    for (int i = from.liquidLayers.length - 1; i >= 0; i--) {
+      if (from.liquidLayers[i].color == targetColor) {
+        volume += from.liquidLayers[i].volume;
+      } else {
+        break;
+      }
+    }
+    
+    // Limit by target container capacity
+    final availableSpace = to.capacity - to.currentVolume;
+    return math.min(volume, availableSpace);
+  }
+}
+
+class LossDetector {
+  static bool hasLost(GameState gameState) {
+    // If already won, not lost
+    if (gameState.isCompleted) return false;
+    
+    // Check if any valid moves exist
+    final validMoves = MoveValidator.getAllValidMoves(gameState.containers);
+    return validMoves.isEmpty;
+  }
+  
+  static String getLossMessage(GameState gameState) {
+    return "No more valid moves available! The puzzle cannot be solved from this state.";
+  }
+}
+```
+
+**Loss State UI Components**
+
+```dart
+class LossDialog extends StatelessWidget {
+  final String message;
+  final VoidCallback onRestart;
+  final VoidCallback onLevelSelect;
+
+  const LossDialog({
+    Key? key,
+    required this.message,
+    required this.onRestart,
+    required this.onLevelSelect,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Game Over'),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: onLevelSelect,
+          child: const Text('Level Select'),
+        ),
+        ElevatedButton(
+          onPressed: onRestart,
+          child: const Text('Restart Level'),
+        ),
+      ],
+    );
+  }
+}
+
+class GameOverOverlay extends StatefulWidget {
+  final String message;
+  final VoidCallback onRestart;
+  final VoidCallback onLevelSelect;
+
+  const GameOverOverlay({
+    Key? key,
+    required this.message,
+    required this.onRestart,
+    required this.onLevelSelect,
+  }) : super(key: key);
+
+  @override
+  _GameOverOverlayState createState() => _GameOverOverlayState();
+}
+
+class _GameOverOverlayState extends State<GameOverOverlay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
+    );
+    
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.elasticOut),
+    );
+    
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Opacity(
+          opacity: _fadeAnimation.value,
+          child: Container(
+            color: Colors.black54,
+            child: Center(
+              child: Transform.scale(
+                scale: _scaleAnimation.value,
+                child: Card(
+                  margin: const EdgeInsets.all(32),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.sentiment_dissatisfied,
+                          size: 64,
+                          color: Colors.orange,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Game Over',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          widget.message,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                        const SizedBox(height: 24),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextButton(
+                              onPressed: widget.onLevelSelect,
+                              child: const Text('Level Select'),
+                            ),
+                            const SizedBox(width: 16),
+                            ElevatedButton(
+                              onPressed: widget.onRestart,
+                              child: const Text('Restart Level'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 ```
@@ -428,6 +748,11 @@ class PouringState extends AnimationState {
 class VictoryState extends AnimationState {
   final Duration celebrationDuration;
   const VictoryState(this.celebrationDuration);
+}
+
+class LossState extends AnimationState {
+  final String message;
+  const LossState(this.message);
 }
 
 class AnimationQueue {

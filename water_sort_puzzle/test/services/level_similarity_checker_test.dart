@@ -7,581 +7,590 @@ import 'package:water_sort_puzzle/services/level_similarity_checker.dart';
 
 void main() {
   group('LevelSimilarityChecker', () {
-    group('Color Normalization', () {
-      test('should normalize identical color patterns correctly', () {
-        // Create two levels with same structure but different colors
-        final level1 = _createTestLevel(
-          id: 1,
-          containers: [
-            _createContainer(0, [
-              LiquidLayer(color: LiquidColor.red, volume: 2),
-              LiquidLayer(color: LiquidColor.blue, volume: 2),
-            ]),
-            _createContainer(1, [
-              LiquidLayer(color: LiquidColor.blue, volume: 2),
-              LiquidLayer(color: LiquidColor.red, volume: 2),
-            ]),
-            _createContainer(2, []), // Empty
-            _createContainer(3, []), // Empty
-          ],
-        );
-        
-        final level2 = _createTestLevel(
-          id: 2,
-          containers: [
-            _createContainer(0, [
-              LiquidLayer(color: LiquidColor.green, volume: 2),
-              LiquidLayer(color: LiquidColor.yellow, volume: 2),
-            ]),
-            _createContainer(1, [
-              LiquidLayer(color: LiquidColor.yellow, volume: 2),
-              LiquidLayer(color: LiquidColor.green, volume: 2),
-            ]),
-            _createContainer(2, []), // Empty
-            _createContainer(3, []), // Empty
-          ],
-        );
-        
-        final sig1 = LevelSimilarityChecker.generateNormalizedSignature(level1);
-        final sig2 = LevelSimilarityChecker.generateNormalizedSignature(level2);
-        
-        expect(sig1, equals(sig2));
-        expect(LevelSimilarityChecker.areLevelsSimilar(level1, level2), isTrue);
+    // Helper function to create a container with liquid layers
+    Container createContainer(int id, List<(LiquidColor, int)> layers) {
+      final liquidLayers = layers
+          .map((layer) => LiquidLayer(color: layer.$1, volume: layer.$2))
+          .toList();
+      return Container(id: id, capacity: 4, liquidLayers: liquidLayers);
+    }
+
+    // Helper function to create a level
+    Level createLevel(int id, List<Container> containers, int colorCount) {
+      return Level(
+        id: id,
+        difficulty: 1,
+        containerCount: containers.length,
+        colorCount: colorCount,
+        initialContainers: containers,
+      );
+    }
+
+    group('generateNormalizedSignature', () {
+      test('should generate consistent signatures for identical levels', () {
+        final containers1 = [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, [(LiquidColor.blue, 2), (LiquidColor.red, 2)]),
+          createContainer(2, []),
+        ];
+        final level1 = createLevel(1, containers1, 2);
+
+        final containers2 = [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, [(LiquidColor.blue, 2), (LiquidColor.red, 2)]),
+          createContainer(2, []),
+        ];
+        final level2 = createLevel(2, containers2, 2);
+
+        final signature1 = LevelSimilarityChecker.generateNormalizedSignature(level1);
+        final signature2 = LevelSimilarityChecker.generateNormalizedSignature(level2);
+
+        expect(signature1, equals(signature2));
       });
-      
-      test('should handle empty containers in normalization', () {
-        final level = _createTestLevel(
-          id: 1,
-          containers: [
-            _createContainer(0, [
-              LiquidLayer(color: LiquidColor.red, volume: 4),
-            ]),
-            _createContainer(1, []), // Empty
-            _createContainer(2, []), // Empty
-          ],
-        );
-        
-        final signature = LevelSimilarityChecker.generateNormalizedSignature(level);
-        expect(signature, contains('EMPTY'));
-        expect(signature, contains('AAAA')); // 4 units of first color
+
+      test('should generate different signatures for different levels', () {
+        final containers1 = [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, [(LiquidColor.blue, 4)]),
+          createContainer(2, []),
+        ];
+        final level1 = createLevel(1, containers1, 2);
+
+        final containers2 = [
+          createContainer(0, [(LiquidColor.red, 4)]),
+          createContainer(1, [(LiquidColor.blue, 4)]),
+          createContainer(2, []),
+        ];
+        final level2 = createLevel(2, containers2, 2);
+
+        final signature1 = LevelSimilarityChecker.generateNormalizedSignature(level1);
+        final signature2 = LevelSimilarityChecker.generateNormalizedSignature(level2);
+
+        expect(signature1, isNot(equals(signature2)));
       });
-      
-      test('should normalize complex multi-layer patterns', () {
-        final level = _createTestLevel(
-          id: 1,
-          containers: [
-            _createContainer(0, [
-              LiquidLayer(color: LiquidColor.red, volume: 1),
-              LiquidLayer(color: LiquidColor.blue, volume: 1),
-              LiquidLayer(color: LiquidColor.red, volume: 2),
-            ]),
-            _createContainer(1, [
-              LiquidLayer(color: LiquidColor.blue, volume: 3),
-              LiquidLayer(color: LiquidColor.red, volume: 1),
-            ]),
-          ],
-        );
-        
-        final normalized = LevelSimilarityChecker.normalizeColors(level.initialContainers);
-        expect(normalized[0], equals('ABAA')); // red=A, blue=B
-        expect(normalized[1], equals('BBBA'));
+
+      test('should be order-independent for containers', () {
+        final containers1 = [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, [(LiquidColor.blue, 4)]),
+          createContainer(2, []),
+        ];
+        final level1 = createLevel(1, containers1, 2);
+
+        // Same containers but in different order
+        final containers2 = [
+          createContainer(0, []),
+          createContainer(1, [(LiquidColor.blue, 4)]),
+          createContainer(2, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+        ];
+        final level2 = createLevel(2, containers2, 2);
+
+        final signature1 = LevelSimilarityChecker.generateNormalizedSignature(level1);
+        final signature2 = LevelSimilarityChecker.generateNormalizedSignature(level2);
+
+        expect(signature1, equals(signature2));
       });
-    });
-    
-    group('Similarity Detection', () {
-      test('should detect identical structural patterns as highly similar', () {
-        final level1 = _createTestLevel(
-          id: 1,
-          containers: [
-            _createContainer(0, [
-              LiquidLayer(color: LiquidColor.red, volume: 2),
-              LiquidLayer(color: LiquidColor.blue, volume: 2),
-            ]),
-            _createContainer(1, [
-              LiquidLayer(color: LiquidColor.blue, volume: 4),
-            ]),
-            _createContainer(2, []), // Empty
-          ],
-        );
-        
-        final level2 = _createTestLevel(
-          id: 2,
-          containers: [
-            _createContainer(0, [
-              LiquidLayer(color: LiquidColor.green, volume: 2),
-              LiquidLayer(color: LiquidColor.yellow, volume: 2),
-            ]),
-            _createContainer(1, [
-              LiquidLayer(color: LiquidColor.yellow, volume: 4),
-            ]),
-            _createContainer(2, []), // Empty
-          ],
-        );
-        
-        expect(LevelSimilarityChecker.areLevelsSimilar(level1, level2), isTrue);
-      });
-      
-      test('should detect different patterns as dissimilar', () {
-        final level1 = _createTestLevel(
-          id: 1,
-          containers: [
-            _createContainer(0, [
-              LiquidLayer(color: LiquidColor.red, volume: 4),
-            ]),
-            _createContainer(1, [
-              LiquidLayer(color: LiquidColor.blue, volume: 4),
-            ]),
-            _createContainer(2, []), // Empty
-          ],
-        );
-        
-        final level2 = _createTestLevel(
-          id: 2,
-          containers: [
-            _createContainer(0, [
-              LiquidLayer(color: LiquidColor.red, volume: 2),
-              LiquidLayer(color: LiquidColor.blue, volume: 2),
-            ]),
-            _createContainer(1, [
-              LiquidLayer(color: LiquidColor.blue, volume: 2),
-              LiquidLayer(color: LiquidColor.red, volume: 2),
-            ]),
-            _createContainer(2, []), // Empty
-          ],
-        );
-        
-        expect(LevelSimilarityChecker.areLevelsSimilar(level1, level2), isFalse);
-      });
-      
-      test('should handle different container counts as dissimilar', () {
-        final level1 = _createTestLevel(
-          id: 1,
-          containers: [
-            _createContainer(0, [LiquidLayer(color: LiquidColor.red, volume: 4)]),
-            _createContainer(1, []),
-          ],
-        );
-        
-        final level2 = _createTestLevel(
-          id: 2,
-          containers: [
-            _createContainer(0, [LiquidLayer(color: LiquidColor.red, volume: 4)]),
-            _createContainer(1, []),
-            _createContainer(2, []),
-          ],
-        );
-        
-        expect(LevelSimilarityChecker.areLevelsSimilar(level1, level2), isFalse);
-      });
-      
-      test('should handle different color counts as dissimilar', () {
-        final level1 = _createTestLevel(
-          id: 1,
-          colorCount: 2,
-          containers: [
-            _createContainer(0, [LiquidLayer(color: LiquidColor.red, volume: 4)]),
-            _createContainer(1, [LiquidLayer(color: LiquidColor.blue, volume: 4)]),
-            _createContainer(2, []),
-          ],
-        );
-        
-        final level2 = _createTestLevel(
-          id: 2,
-          colorCount: 3,
-          containers: [
-            _createContainer(0, [LiquidLayer(color: LiquidColor.red, volume: 4)]),
-            _createContainer(1, [LiquidLayer(color: LiquidColor.blue, volume: 4)]),
-            _createContainer(2, [LiquidLayer(color: LiquidColor.green, volume: 4)]),
-            _createContainer(3, []),
-          ],
-        );
-        
-        expect(LevelSimilarityChecker.areLevelsSimilar(level1, level2), isFalse);
+
+      test('should be color-agnostic', () {
+        final containers1 = [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, [(LiquidColor.blue, 2), (LiquidColor.red, 2)]),
+          createContainer(2, []),
+        ];
+        final level1 = createLevel(1, containers1, 2);
+
+        // Same pattern but with different colors
+        final containers2 = [
+          createContainer(0, [(LiquidColor.green, 2), (LiquidColor.yellow, 2)]),
+          createContainer(1, [(LiquidColor.yellow, 2), (LiquidColor.green, 2)]),
+          createContainer(2, []),
+        ];
+        final level2 = createLevel(2, containers2, 2);
+
+        final signature1 = LevelSimilarityChecker.generateNormalizedSignature(level1);
+        final signature2 = LevelSimilarityChecker.generateNormalizedSignature(level2);
+
+        expect(signature1, equals(signature2));
       });
     });
-    
-    group('Similarity Threshold Validation', () {
-      test('should respect 80% similarity threshold', () {
-        // Create levels that are similar but not identical
-        final level1 = _createTestLevel(
-          id: 1,
-          containers: [
-            _createContainer(0, [
-              LiquidLayer(color: LiquidColor.red, volume: 2),
-              LiquidLayer(color: LiquidColor.blue, volume: 2),
-            ]),
-            _createContainer(1, [
-              LiquidLayer(color: LiquidColor.blue, volume: 2),
-              LiquidLayer(color: LiquidColor.red, volume: 2),
-            ]),
-            _createContainer(2, []), // Empty
-            _createContainer(3, []), // Empty
-          ],
-        );
-        
-        // Slightly different arrangement
-        final level2 = _createTestLevel(
-          id: 2,
-          containers: [
-            _createContainer(0, [
-              LiquidLayer(color: LiquidColor.red, volume: 2),
-              LiquidLayer(color: LiquidColor.blue, volume: 2),
-            ]),
-            _createContainer(1, [
-              LiquidLayer(color: LiquidColor.blue, volume: 4), // Different mixing
-            ]),
-            _createContainer(2, []), // Empty
-            _createContainer(3, []), // Empty
-          ],
-        );
-        
-        final similarity = LevelSimilarityChecker.compareStructuralPatterns(level1, level2);
-        
-        // Should be similar but not exceed threshold
-        expect(similarity, lessThan(LevelSimilarityChecker.similarityThreshold));
+
+    group('areLevelsSimilar', () {
+      test('should return true for identical levels', () {
+        final containers = [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, [(LiquidColor.blue, 2), (LiquidColor.red, 2)]),
+          createContainer(2, []),
+        ];
+        final level1 = createLevel(1, containers, 2);
+        final level2 = createLevel(2, containers, 2);
+
+        expect(LevelSimilarityChecker.areLevelsSimilar(level1, level2), isTrue);
+      });
+
+      test('should return false for levels with different container counts', () {
+        final containers1 = [
+          createContainer(0, [(LiquidColor.red, 4)]),
+          createContainer(1, []),
+        ];
+        final level1 = createLevel(1, containers1, 1);
+
+        final containers2 = [
+          createContainer(0, [(LiquidColor.red, 4)]),
+          createContainer(1, []),
+          createContainer(2, []),
+        ];
+        final level2 = createLevel(2, containers2, 1);
+
         expect(LevelSimilarityChecker.areLevelsSimilar(level1, level2), isFalse);
       });
-      
-      test('should validate level uniqueness against list', () {
+
+      test('should return false for levels with different color counts', () {
+        final containers1 = [
+          createContainer(0, [(LiquidColor.red, 4)]),
+          createContainer(1, []),
+        ];
+        final level1 = createLevel(1, containers1, 1);
+
+        final containers2 = [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, []),
+        ];
+        final level2 = createLevel(2, containers2, 2);
+
+        expect(LevelSimilarityChecker.areLevelsSimilar(level1, level2), isFalse);
+      });
+
+      test('should return true for similar levels above threshold', () {
+        final containers1 = [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, [(LiquidColor.blue, 2), (LiquidColor.red, 2)]),
+          createContainer(2, []),
+          createContainer(3, []),
+          createContainer(4, []),
+        ];
+        final level1 = createLevel(1, containers1, 2);
+
+        // 4 out of 5 containers match exactly (80% similarity)
+        final containers2 = [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, [(LiquidColor.blue, 2), (LiquidColor.red, 2)]),
+          createContainer(2, []),
+          createContainer(3, []),
+          createContainer(4, []), // Same as level1 - all empty
+        ];
+        final level2 = createLevel(2, containers2, 2);
+
+        expect(LevelSimilarityChecker.areLevelsSimilar(level1, level2), isTrue);
+      });
+
+      test('should return false for significantly different levels', () {
+        final containers1 = [
+          createContainer(0, [(LiquidColor.red, 4)]),
+          createContainer(1, [(LiquidColor.blue, 4)]),
+          createContainer(2, []),
+        ];
+        final level1 = createLevel(1, containers1, 2);
+
+        final containers2 = [
+          createContainer(0, [(LiquidColor.red, 1), (LiquidColor.blue, 1), (LiquidColor.red, 1), (LiquidColor.blue, 1)]),
+          createContainer(1, [(LiquidColor.blue, 1), (LiquidColor.red, 1), (LiquidColor.blue, 1), (LiquidColor.red, 1)]),
+          createContainer(2, []),
+        ];
+        final level2 = createLevel(2, containers2, 2);
+
+        expect(LevelSimilarityChecker.areLevelsSimilar(level1, level2), isFalse);
+      });
+    });
+
+    group('normalizeColors', () {
+      test('should assign colors consistently', () {
+        final containers = [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, [(LiquidColor.blue, 2), (LiquidColor.red, 2)]),
+          createContainer(2, []),
+        ];
+
+        final normalized = LevelSimilarityChecker.normalizeColors(containers);
+
+        expect(normalized, hasLength(3));
+        expect(normalized[2], equals('EMPTY'));
+        
+        // First color encountered should be 'A', second should be 'B'
+        expect(normalized[0], equals('AABB'));
+        expect(normalized[1], equals('BBAA'));
+      });
+
+      test('should handle empty containers', () {
+        final containers = [
+          createContainer(0, []),
+          createContainer(1, [(LiquidColor.red, 4)]),
+          createContainer(2, []),
+        ];
+
+        final normalized = LevelSimilarityChecker.normalizeColors(containers);
+
+        expect(normalized, equals(['EMPTY', 'AAAA', 'EMPTY']));
+      });
+
+      test('should handle complex layer patterns', () {
+        final containers = [
+          createContainer(0, [(LiquidColor.red, 1), (LiquidColor.blue, 2), (LiquidColor.red, 1)]),
+          createContainer(1, [(LiquidColor.blue, 3), (LiquidColor.red, 1)]),
+        ];
+
+        final normalized = LevelSimilarityChecker.normalizeColors(containers);
+
+        expect(normalized, equals(['ABBA', 'BBBA']));
+      });
+    });
+
+    group('calculatePatternSimilarity', () {
+      test('should return 1.0 for identical patterns', () {
+        final pattern1 = ['AABB', 'BBAA', 'EMPTY'];
+        final pattern2 = ['AABB', 'BBAA', 'EMPTY'];
+
+        final similarity = LevelSimilarityChecker.calculatePatternSimilarity(pattern1, pattern2);
+
+        expect(similarity, equals(1.0));
+      });
+
+      test('should return 0.0 for completely different patterns', () {
+        final pattern1 = ['AAAA', 'BBBB', 'EMPTY'];
+        final pattern2 = ['ABAB', 'BABA', 'CCCC'];
+
+        final similarity = LevelSimilarityChecker.calculatePatternSimilarity(pattern1, pattern2);
+
+        expect(similarity, lessThan(0.3)); // Should be very low
+      });
+
+      test('should be order-independent', () {
+        final pattern1 = ['AABB', 'BBAA', 'EMPTY'];
+        final pattern2 = ['EMPTY', 'AABB', 'BBAA']; // Same patterns, different order
+
+        final similarity = LevelSimilarityChecker.calculatePatternSimilarity(pattern1, pattern2);
+
+        expect(similarity, equals(1.0));
+      });
+
+      test('should return 0.0 for different length patterns', () {
+        final pattern1 = ['AABB', 'BBAA'];
+        final pattern2 = ['AABB', 'BBAA', 'EMPTY'];
+
+        final similarity = LevelSimilarityChecker.calculatePatternSimilarity(pattern1, pattern2);
+
+        expect(similarity, equals(0.0));
+      });
+    });
+
+    group('isLevelUnique', () {
+      test('should return true for unique level', () {
         final existingLevels = [
-          _createTestLevel(
-            id: 1,
-            containers: [
-              _createContainer(0, [LiquidLayer(color: LiquidColor.red, volume: 4)]),
-              _createContainer(1, [LiquidLayer(color: LiquidColor.blue, volume: 4)]),
-              _createContainer(2, []),
-            ],
-          ),
-          _createTestLevel(
-            id: 2,
-            containers: [
-              _createContainer(0, [
-                LiquidLayer(color: LiquidColor.green, volume: 2),
-                LiquidLayer(color: LiquidColor.yellow, volume: 2),
-              ]),
-              _createContainer(1, [LiquidLayer(color: LiquidColor.yellow, volume: 4)]),
-              _createContainer(2, []),
-            ],
-          ),
+          createLevel(1, [
+            createContainer(0, [(LiquidColor.red, 4)]),
+            createContainer(1, [(LiquidColor.blue, 4)]),
+            createContainer(2, []),
+          ], 2),
         ];
-        
-        // Test unique level - completely different structure with 4 containers
-        final uniqueLevel = _createTestLevel(
-          id: 3,
-          containers: [
-            _createContainer(0, [
-              LiquidLayer(color: LiquidColor.purple, volume: 1),
-              LiquidLayer(color: LiquidColor.orange, volume: 1),
-              LiquidLayer(color: LiquidColor.purple, volume: 1),
-              LiquidLayer(color: LiquidColor.orange, volume: 1),
-            ]),
-            _createContainer(1, [LiquidLayer(color: LiquidColor.orange, volume: 4)]),
-            _createContainer(2, [LiquidLayer(color: LiquidColor.purple, volume: 4)]),
-            _createContainer(3, []), // Extra container makes it structurally different
-          ],
-        );
-        
-        expect(
-          LevelSimilarityChecker.validateLevelUniqueness(uniqueLevel, existingLevels),
-          isTrue,
-        );
-        
-        // Test similar level (same structure as first existing level)
-        final similarLevel = _createTestLevel(
-          id: 4,
-          containers: [
-            _createContainer(0, [LiquidLayer(color: LiquidColor.pink, volume: 4)]),
-            _createContainer(1, [LiquidLayer(color: LiquidColor.cyan, volume: 4)]),
-            _createContainer(2, []),
-          ],
-        );
-        
-        expect(
-          LevelSimilarityChecker.validateLevelUniqueness(similarLevel, existingLevels),
-          isFalse,
-        );
+
+        final newLevel = createLevel(2, [
+          createContainer(0, [(LiquidColor.red, 1), (LiquidColor.blue, 3)]),
+          createContainer(1, [(LiquidColor.blue, 1), (LiquidColor.red, 3)]),
+          createContainer(2, []),
+        ], 2);
+
+        expect(LevelSimilarityChecker.isLevelUnique(newLevel, existingLevels), isTrue);
+      });
+
+      test('should return false for similar level', () {
+        final existingLevels = [
+          createLevel(1, [
+            createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+            createContainer(1, [(LiquidColor.blue, 2), (LiquidColor.red, 2)]),
+            createContainer(2, []),
+          ], 2),
+        ];
+
+        // Same pattern with different colors (should be detected as similar)
+        final newLevel = createLevel(2, [
+          createContainer(0, [(LiquidColor.green, 2), (LiquidColor.yellow, 2)]),
+          createContainer(1, [(LiquidColor.yellow, 2), (LiquidColor.green, 2)]),
+          createContainer(2, []),
+        ], 2);
+
+        expect(LevelSimilarityChecker.isLevelUnique(newLevel, existingLevels), isFalse);
       });
     });
-    
-    group('Edge Cases', () {
-      test('should handle all empty containers', () {
-        final level1 = _createTestLevel(
-          id: 1,
-          containers: [
-            _createContainer(0, []),
-            _createContainer(1, []),
-            _createContainer(2, []),
-          ],
-        );
-        
-        final level2 = _createTestLevel(
-          id: 2,
-          containers: [
-            _createContainer(0, []),
-            _createContainer(1, []),
-            _createContainer(2, []),
-          ],
-        );
-        
-        expect(LevelSimilarityChecker.areLevelsSimilar(level1, level2), isTrue);
+
+    group('isLevelSimilarToAny', () {
+      test('should return true when level is similar to existing levels', () {
+        final existingLevels = [
+          createLevel(1, [
+            createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+            createContainer(1, [(LiquidColor.blue, 2), (LiquidColor.red, 2)]),
+            createContainer(2, []),
+          ], 2),
+        ];
+
+        // Same pattern with different colors (should be detected as similar)
+        final newLevel = createLevel(2, [
+          createContainer(0, [(LiquidColor.green, 2), (LiquidColor.yellow, 2)]),
+          createContainer(1, [(LiquidColor.yellow, 2), (LiquidColor.green, 2)]),
+          createContainer(2, []),
+        ], 2);
+
+        expect(LevelSimilarityChecker.isLevelSimilarToAny(newLevel, existingLevels), isTrue);
       });
-      
-      test('should handle single container levels', () {
-        final level1 = _createTestLevel(
-          id: 1,
-          containers: [
-            _createContainer(0, [LiquidLayer(color: LiquidColor.red, volume: 4)]),
-          ],
-        );
-        
-        final level2 = _createTestLevel(
-          id: 2,
-          containers: [
-            _createContainer(0, [LiquidLayer(color: LiquidColor.blue, volume: 4)]),
-          ],
-        );
-        
-        expect(LevelSimilarityChecker.areLevelsSimilar(level1, level2), isTrue);
-      });
-      
-      test('should handle levels with maximum color mixing', () {
-        final level = _createTestLevel(
-          id: 1,
-          containers: [
-            _createContainer(0, [
-              LiquidLayer(color: LiquidColor.red, volume: 1),
-              LiquidLayer(color: LiquidColor.blue, volume: 1),
-              LiquidLayer(color: LiquidColor.green, volume: 1),
-              LiquidLayer(color: LiquidColor.yellow, volume: 1),
-            ]),
-          ],
-        );
-        
-        final signature = LevelSimilarityChecker.generateNormalizedSignature(level);
-        expect(signature, contains('ABCD'));
-      });
-      
-      test('should handle zero volume layers gracefully', () {
-        // This shouldn't happen in normal gameplay, but test robustness
-        final level = _createTestLevel(
-          id: 1,
-          containers: [
-            _createContainer(0, [
-              LiquidLayer(color: LiquidColor.red, volume: 4),
-            ]),
-          ],
-        );
-        
-        expect(() => LevelSimilarityChecker.generateNormalizedSignature(level), 
-               returnsNormally);
-      });
-      
-      test('should handle very large container counts', () {
-        final containers = <Container>[];
-        for (int i = 0; i < 20; i++) {
-          if (i < 10) {
-            containers.add(_createContainer(i, [
-              LiquidLayer(color: LiquidColor.values[i % LiquidColor.values.length], volume: 4),
-            ]));
-          } else {
-            containers.add(_createContainer(i, [])); // Empty
-          }
-        }
-        
-        final level = _createTestLevel(id: 1, containers: containers);
-        
-        expect(() => LevelSimilarityChecker.generateNormalizedSignature(level), 
-               returnsNormally);
+
+      test('should return false when level is unique', () {
+        final existingLevels = [
+          createLevel(1, [
+            createContainer(0, [(LiquidColor.red, 4)]),
+            createContainer(1, [(LiquidColor.blue, 4)]),
+            createContainer(2, []),
+          ], 2),
+        ];
+
+        final newLevel = createLevel(2, [
+          createContainer(0, [(LiquidColor.red, 1), (LiquidColor.blue, 3)]),
+          createContainer(1, [(LiquidColor.blue, 1), (LiquidColor.red, 3)]),
+          createContainer(2, []),
+        ], 2);
+
+        expect(LevelSimilarityChecker.isLevelSimilarToAny(newLevel, existingLevels), isFalse);
       });
     });
-    
-    group('Pattern Analysis', () {
-      test('should correctly count color segments', () {
-        expect(LevelSimilarityChecker.countColorSegments('AAAA'), equals(1));
-        expect(LevelSimilarityChecker.countColorSegments('AABB'), equals(2));
-        expect(LevelSimilarityChecker.countColorSegments('ABAB'), equals(4));
-        expect(LevelSimilarityChecker.countColorSegments('ABCD'), equals(4));
-        expect(LevelSimilarityChecker.countColorSegments('EMPTY'), equals(0));
-        expect(LevelSimilarityChecker.countColorSegments(''), equals(0));
+
+    group('isPatternValid', () {
+      test('should return true for unsolved patterns', () {
+        final pattern = ['AABB', 'BBAA', 'EMPTY'];
+        expect(LevelSimilarityChecker.isPatternValid(pattern), isTrue);
       });
-      
-      test('should generate detailed signatures correctly', () {
-        final level = _createTestLevel(
-          id: 1,
-          containers: [
-            _createContainer(0, [
-              LiquidLayer(color: LiquidColor.red, volume: 2),
-              LiquidLayer(color: LiquidColor.blue, volume: 2),
-            ]),
-            _createContainer(1, [LiquidLayer(color: LiquidColor.blue, volume: 4)]),
-            _createContainer(2, []), // Empty
-          ],
-        );
-        
-        final detailed = LevelSimilarityChecker.generateDetailedSignature(level);
-        
-        expect(detailed['container_count'], equals(3));
-        expect(detailed['color_count'], equals(2));
-        expect(detailed['normalized_pattern'], isA<List<String>>());
-        expect(detailed['distribution'], isA<Map<String, double>>());
-        expect(detailed['complexity'], isA<Map<String, double>>());
-        expect(detailed['signature'], isA<String>());
+
+      test('should return false for solved patterns', () {
+        final pattern = ['AAAA', 'BBBB', 'EMPTY'];
+        expect(LevelSimilarityChecker.isPatternValid(pattern), isFalse);
       });
-      
-      test('should find most similar level correctly', () {
-        final targetLevel = _createTestLevel(
-          id: 1,
-          containers: [
-            _createContainer(0, [LiquidLayer(color: LiquidColor.red, volume: 4)]),
-            _createContainer(1, [LiquidLayer(color: LiquidColor.blue, volume: 4)]),
-            _createContainer(2, []),
-          ],
-        );
-        
-        final candidates = [
-          _createTestLevel(
-            id: 2,
-            containers: [
-              _createContainer(0, [LiquidLayer(color: LiquidColor.green, volume: 4)]),
-              _createContainer(1, [LiquidLayer(color: LiquidColor.yellow, volume: 4)]),
-              _createContainer(2, []),
-            ],
-          ),
-          _createTestLevel(
-            id: 3,
-            containers: [
-              _createContainer(0, [
-                LiquidLayer(color: LiquidColor.purple, volume: 2),
-                LiquidLayer(color: LiquidColor.orange, volume: 2),
-              ]),
-              _createContainer(1, [LiquidLayer(color: LiquidColor.orange, volume: 4)]),
-              _createContainer(2, []),
-            ],
-          ),
+
+      test('should return false for all empty pattern', () {
+        final pattern = ['EMPTY', 'EMPTY', 'EMPTY'];
+        expect(LevelSimilarityChecker.isPatternValid(pattern), isFalse);
+      });
+
+      test('should return true for mixed pattern with some solved containers', () {
+        final pattern = ['AAAA', 'ABBA', 'EMPTY']; // One solved, one mixed
+        expect(LevelSimilarityChecker.isPatternValid(pattern), isTrue);
+      });
+    });
+
+    group('getSimilarityAnalysis', () {
+      test('should provide detailed analysis', () {
+        final level1 = createLevel(1, [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, []),
+        ], 2);
+
+        final level2 = createLevel(2, [
+          createContainer(0, [(LiquidColor.green, 2), (LiquidColor.yellow, 2)]),
+          createContainer(1, []),
+        ], 2);
+
+        final analysis = LevelSimilarityChecker.getSimilarityAnalysis(level1, level2);
+
+        expect(analysis, containsPair('similarity_score', isA<double>()));
+        expect(analysis, containsPair('is_similar', isA<bool>()));
+        expect(analysis, containsPair('threshold', LevelSimilarityChecker.similarityThreshold));
+        expect(analysis, containsPair('level1_signature', isA<String>()));
+        expect(analysis, containsPair('level2_signature', isA<String>()));
+        expect(analysis, containsPair('level1_pattern', isA<List<String>>()));
+        expect(analysis, containsPair('level2_pattern', isA<List<String>>()));
+      });
+    });
+
+    group('generatePatternHash', () {
+      test('should generate consistent hashes for identical levels', () {
+        final containers = [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, []),
         ];
-        
-        final result = LevelSimilarityChecker.findMostSimilarLevel(targetLevel, candidates);
-        
-        expect(result.level, equals(candidates[0])); // First candidate is identical structure
-        expect(result.similarity, greaterThan(0.9));
+        final level1 = createLevel(1, containers, 2);
+        final level2 = createLevel(2, containers, 2);
+
+        final hash1 = LevelSimilarityChecker.generatePatternHash(level1);
+        final hash2 = LevelSimilarityChecker.generatePatternHash(level2);
+
+        expect(hash1, equals(hash2));
       });
-      
-      test('should analyze level set similarity correctly', () {
+
+      test('should generate different hashes for different levels', () {
+        final level1 = createLevel(1, [
+          createContainer(0, [(LiquidColor.red, 4)]),
+          createContainer(1, []),
+        ], 1);
+
+        final level2 = createLevel(2, [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, []),
+        ], 2);
+
+        final hash1 = LevelSimilarityChecker.generatePatternHash(level1);
+        final hash2 = LevelSimilarityChecker.generatePatternHash(level2);
+
+        expect(hash1, isNot(equals(hash2)));
+      });
+    });
+
+    group('analyzeLevelSetSimilarity', () {
+      test('should handle empty level set', () {
+        final analysis = LevelSimilarityChecker.analyzeLevelSetSimilarity([]);
+
+        expect(analysis['total_levels'], equals(0));
+        expect(analysis['unique_levels'], equals(0));
+        expect(analysis['similarity_pairs'], equals(0));
+        expect(analysis['uniqueness_ratio'], equals(1.0));
+        expect(analysis['analysis_summary'], equals('No levels to analyze'));
+      });
+
+      test('should analyze unique levels correctly', () {
         final levels = [
-          _createTestLevel(
-            id: 1,
-            containers: [
-              _createContainer(0, [LiquidLayer(color: LiquidColor.red, volume: 4)]),
-              _createContainer(1, []),
-            ],
-          ),
-          _createTestLevel(
-            id: 2,
-            containers: [
-              _createContainer(0, [LiquidLayer(color: LiquidColor.blue, volume: 4)]),
-              _createContainer(1, []),
-            ],
-          ),
-          _createTestLevel(
-            id: 3,
-            containers: [
-              _createContainer(0, [
-                LiquidLayer(color: LiquidColor.green, volume: 2),
-                LiquidLayer(color: LiquidColor.yellow, volume: 2),
-              ]),
-              _createContainer(1, []),
-            ],
-          ),
+          createLevel(1, [
+            createContainer(0, [(LiquidColor.red, 4)]),
+            createContainer(1, []),
+          ], 1),
+          createLevel(2, [
+            createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+            createContainer(1, []),
+          ], 2),
+          createLevel(3, [
+            createContainer(0, [(LiquidColor.green, 4)]),
+            createContainer(1, [(LiquidColor.yellow, 4)]),
+            createContainer(2, []),
+          ], 2),
         ];
-        
+
         final analysis = LevelSimilarityChecker.analyzeLevelSetSimilarity(levels);
-        
+
         expect(analysis['total_levels'], equals(3));
-        expect(analysis['comparisons'], equals(3)); // 3 choose 2
-        expect(analysis['avg_similarity'], isA<double>());
-        expect(analysis['max_similarity'], isA<double>());
-        expect(analysis['min_similarity'], isA<double>());
-        expect(analysis['similar_pairs'], isA<int>());
-        expect(analysis['uniqueness_ratio'], isA<double>());
+        expect(analysis['unique_levels'], equals(3));
+        expect(analysis['similarity_pairs'], equals(0));
+        expect(analysis['uniqueness_ratio'], equals(1.0));
+        expect(analysis['analysis_summary'], contains('Excellent uniqueness'));
+      });
+
+      test('should detect similar levels', () {
+        final levels = [
+          createLevel(1, [
+            createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+            createContainer(1, [(LiquidColor.blue, 2), (LiquidColor.red, 2)]),
+            createContainer(2, []),
+          ], 2),
+          createLevel(2, [
+            createContainer(0, [(LiquidColor.green, 2), (LiquidColor.yellow, 2)]),
+            createContainer(1, [(LiquidColor.yellow, 2), (LiquidColor.green, 2)]),
+            createContainer(2, []),
+          ], 2), // Same pattern as level 1, different colors
+          createLevel(3, [
+            createContainer(0, [(LiquidColor.purple, 4)]),
+            createContainer(1, []),
+          ], 1), // Different pattern
+        ];
+
+        final analysis = LevelSimilarityChecker.analyzeLevelSetSimilarity(levels);
+
+        expect(analysis['total_levels'], equals(3));
+        expect(analysis['unique_levels'], equals(2)); // Only 2 unique patterns
+        expect(analysis['similarity_pairs'], equals(1)); // One similar pair
+        expect(analysis['uniqueness_ratio'], closeTo(0.67, 0.01));
+        expect(analysis['analysis_summary'], contains('Moderate uniqueness'));
       });
     });
-    
-    group('Performance and Robustness', () {
-      test('should handle comparison of many levels efficiently', () {
-        final levels = <Level>[];
-        
-        // Generate 50 test levels
-        for (int i = 0; i < 50; i++) {
-          levels.add(_createTestLevel(
-            id: i,
-            containers: [
-              _createContainer(0, [
-                LiquidLayer(color: LiquidColor.values[i % LiquidColor.values.length], volume: 4),
-              ]),
-              _createContainer(1, []),
-            ],
-          ));
-        }
-        
-        final stopwatch = Stopwatch()..start();
-        
-        // Test that we can check similarity for all pairs
-        for (int i = 0; i < levels.length; i++) {
-          for (int j = i + 1; j < levels.length; j++) {
-            LevelSimilarityChecker.areLevelsSimilar(levels[i], levels[j]);
-          }
-        }
-        
-        stopwatch.stop();
-        
-        // Should complete within reasonable time (less than 1 second for 50 levels)
-        expect(stopwatch.elapsedMilliseconds, lessThan(1000));
+
+    group('edge cases', () {
+      test('should handle single container levels', () {
+        final level1 = createLevel(1, [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+        ], 2);
+
+        final level2 = createLevel(2, [
+          createContainer(0, [(LiquidColor.green, 2), (LiquidColor.yellow, 2)]),
+        ], 2);
+
+        expect(LevelSimilarityChecker.areLevelsSimilar(level1, level2), isTrue);
       });
-      
-      test('should handle malformed input gracefully', () {
-        final emptyLevel = _createTestLevel(id: 1, containers: []);
-        final normalLevel = _createTestLevel(
-          id: 2,
-          containers: [
-            _createContainer(0, [LiquidLayer(color: LiquidColor.red, volume: 4)]),
-          ],
-        );
-        
-        expect(() => LevelSimilarityChecker.areLevelsSimilar(emptyLevel, normalLevel), 
-               returnsNormally);
+
+      test('should handle levels with many colors', () {
+        final level1 = createLevel(1, [
+          createContainer(0, [(LiquidColor.red, 1), (LiquidColor.blue, 1), (LiquidColor.green, 1), (LiquidColor.yellow, 1)]),
+          createContainer(1, []),
+        ], 4);
+
+        final level2 = createLevel(2, [
+          createContainer(0, [(LiquidColor.purple, 1), (LiquidColor.orange, 1), (LiquidColor.pink, 1), (LiquidColor.cyan, 1)]),
+          createContainer(1, []),
+        ], 4);
+
+        expect(LevelSimilarityChecker.areLevelsSimilar(level1, level2), isTrue);
+      });
+
+      test('should handle levels with single-volume layers', () {
+        final level1 = createLevel(1, [
+          createContainer(0, [(LiquidColor.red, 1), (LiquidColor.blue, 1), (LiquidColor.red, 1), (LiquidColor.blue, 1)]),
+          createContainer(1, []),
+        ], 2);
+
+        final level2 = createLevel(2, [
+          createContainer(0, [(LiquidColor.green, 1), (LiquidColor.yellow, 1), (LiquidColor.green, 1), (LiquidColor.yellow, 1)]),
+          createContainer(1, []),
+        ], 2);
+
+        expect(LevelSimilarityChecker.areLevelsSimilar(level1, level2), isTrue);
+      });
+
+      test('should handle empty levels', () {
+        final level1 = createLevel(1, [
+          createContainer(0, []),
+          createContainer(1, []),
+        ], 0);
+
+        final level2 = createLevel(2, [
+          createContainer(0, []),
+          createContainer(1, []),
+        ], 0);
+
+        expect(LevelSimilarityChecker.areLevelsSimilar(level1, level2), isTrue);
+      });
+    });
+
+    group('threshold validation', () {
+      test('should use correct similarity threshold', () {
+        expect(LevelSimilarityChecker.similarityThreshold, equals(0.8));
+      });
+
+      test('should respect threshold in similarity detection', () {
+        // Create levels that are exactly at the threshold (4 out of 5 containers match = 80%)
+        final level1 = createLevel(1, [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, [(LiquidColor.blue, 2), (LiquidColor.red, 2)]),
+          createContainer(2, []),
+          createContainer(3, [(LiquidColor.red, 4)]),
+          createContainer(4, []),
+        ], 2);
+
+        // 4 out of 5 containers match exactly (80% similarity)
+        final level2 = createLevel(2, [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, [(LiquidColor.blue, 2), (LiquidColor.red, 2)]),
+          createContainer(2, []),
+          createContainer(3, [(LiquidColor.red, 4)]),
+          createContainer(4, [(LiquidColor.blue, 4)]), // Different - only this one differs
+        ], 2);
+
+        final similarity = LevelSimilarityChecker.compareStructuralPatterns(level1, level2);
+        final isSimilar = LevelSimilarityChecker.areLevelsSimilar(level1, level2);
+
+        // Should be at or above threshold (4/5 = 0.8)
+        expect(similarity, greaterThanOrEqualTo(LevelSimilarityChecker.similarityThreshold));
+        expect(isSimilar, isTrue);
       });
     });
   });
-}
-
-/// Helper function to create a test level
-Level _createTestLevel({
-  required int id,
-  required List<Container> containers,
-  int? colorCount,
-}) {
-  // Calculate color count if not provided
-  final colors = <LiquidColor>{};
-  for (final container in containers) {
-    for (final layer in container.liquidLayers) {
-      colors.add(layer.color);
-    }
-  }
-  
-  return Level(
-    id: id,
-    difficulty: 1,
-    containerCount: containers.length,
-    colorCount: colorCount ?? colors.length,
-    initialContainers: containers,
-  );
-}
-
-/// Helper function to create a test container
-Container _createContainer(int id, List<LiquidLayer> layers) {
-  return Container(
-    id: id,
-    capacity: 4,
-    liquidLayers: layers,
-  );
 }

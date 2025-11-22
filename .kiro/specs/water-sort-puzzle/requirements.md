@@ -117,6 +117,8 @@ The Water Sort Puzzle app is a cross-platform mobile game where players sort col
 6. WHEN the system generates a new level THEN the system SHALL ensure it is substantially different from all previously generated levels in the current session
 7. WHEN comparing level similarity THEN the system SHALL consider two levels substantially different if they have different color arrangements that cannot be made equivalent through simple color substitution or changing container order
 8. IF a generated level is too similar to a previous level THEN the system SHALL regenerate until a sufficiently different level is created
+9. WHEN the system generates a level THEN the system SHALL ensure no containers are already completed (containing only one color and being full)
+10. IF a generated level contains any completed containers THEN the system SHALL regenerate until no completed containers exist in the initial state
 
 ### Requirement 10
 
@@ -129,3 +131,16 @@ The Water Sort Puzzle app is a cross-platform mobile game where players sort col
 3. WHEN I tap containers during an animation THEN the system SHALL respond to selection and move commands without delay
 4. IF I start a new move while a previous animation is playing THEN the system SHALL complete the previous animation instantly and begin the new move
 5. WHEN multiple moves are made rapidly THEN the system SHALL maintain game state consistency while allowing fluid gameplay
+
+### Requirement 11
+
+**User Story:** As a player, I want the game to detect when no more valid moves are possible, so that I know when I have lost and can restart or try a different approach.
+
+#### Acceptance Criteria
+
+1. WHEN no valid moves remain AND the puzzle is not solved THEN the system SHALL detect the loss condition
+2. WHEN a loss condition is detected THEN the system SHALL display a clear message informing the player they have lost
+3. WHEN displaying the loss message THEN the system SHALL provide options to restart the current level or return to level selection
+4. WHEN checking for valid moves THEN the system SHALL consider all possible pour combinations between containers
+5. IF at least one valid pour move exists THEN the system SHALL NOT trigger the loss condition
+6. WHEN the loss condition is triggered THEN the system SHALL prevent further move attempts until the player chooses to restart or exit

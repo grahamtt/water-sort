@@ -54,12 +54,13 @@
 
   - Create LevelSimilarityChecker class with pattern normalization
   - Implement color-agnostic signature generation for levels
-  - Add structural pattern comparison algorithm
+  - Add structural pattern comparison algorithm with container order independence
   - Create similarity threshold validation (80% threshold)
+  - Implement pattern sorting to make container order irrelevant for comparison
   - Write comprehensive unit tests for similarity detection edge cases
   - _Requirements: 9.6, 9.7, 9.8_
 
-- [ ] 6.2 Build level generation service with uniqueness tracking
+- [x] 6.2 Build level generation service with uniqueness tracking
 
   - Implement LevelGenerationService to manage session-level uniqueness
   - Add session history tracking for generated levels
@@ -67,6 +68,16 @@
   - Implement fallback mechanism when similarity threshold cannot be met
   - Write integration tests for unique level generation workflow
   - _Requirements: 9.6, 9.7, 9.8_
+
+- [ ] 6.3 Implement completed container validation for level generation
+
+  - Create LevelValidator class with validateGeneratedLevel method
+  - Implement \_hasCompletedContainers method to detect full single-color containers
+  - Add \_isContainerCompleted method to check if container is both full and single-color
+  - Integrate completed container validation into level generation workflow
+  - Add hasCompletedContainers method to LevelGenerator abstract interface
+  - Write comprehensive unit tests for completed container detection edge cases
+  - _Requirements: 9.9, 9.10_
 
 - [x] 7. Build persistence layer with Hive and SharedPreferences
 
@@ -95,7 +106,7 @@
   - Write widget tests for animation behavior
   - _Requirements: 2.3, 2.6_
 
-- [ ] 9.1 Implement non-blocking UI animation system
+- [x] 9.1 Implement non-blocking UI animation system
 
   - Create AnimationQueue class for managing multiple concurrent animations
   - Implement animation interruption and skipping functionality
@@ -159,7 +170,7 @@
   - Write widget tests for main game screen
   - _Requirements: 6.4, 6.5_
 
-- [ ] 16. Implement error handling and user feedback
+- [x] 16. Implement error handling and user feedback
 
   - Add SnackBar notifications for invalid moves
   - Create error recovery for corrupted save data
@@ -168,7 +179,34 @@
   - Write tests for error handling scenarios
   - _Requirements: 3.5, 2.4, 2.5_
 
-- [ ] 17. Add app lifecycle and state persistence
+- [ ] 17. Implement loss detection system
+
+  - Create MoveValidator class with getAllValidMoves method
+  - Implement move validation logic for all container combinations
+  - Add LossDetector class with hasLost and getLossMessage methods
+  - Integrate loss detection into GameEngine with checkLossCondition method
+  - Write comprehensive unit tests for loss detection edge cases
+  - _Requirements: 11.1, 11.4, 11.5_
+
+- [ ] 17.1 Add loss state management and UI components
+
+  - Update GameState model to include isLost boolean field
+  - Create LossDialog widget for simple loss notification
+  - Implement GameOverOverlay widget with animated presentation
+  - Add loss state to animation system (LossState class)
+  - Write widget tests for loss UI components
+  - _Requirements: 11.2, 11.3, 11.6_
+
+- [ ] 17.2 Integrate loss detection into game flow
+
+  - Add loss condition checking to game state provider
+  - Implement loss detection triggers after each move
+  - Create restart and level selection handlers for loss state
+  - Add loss prevention during animations and transitions
+  - Write integration tests for complete loss detection workflow
+  - _Requirements: 11.1, 11.2, 11.3, 11.6_
+
+- [ ] 18. Add app lifecycle and state persistence
 
   - Implement automatic save on app pause/background
   - Create state restoration on app resume
@@ -177,7 +215,7 @@
   - Write integration tests for app lifecycle
   - _Requirements: 8.1, 8.2, 8.3, 8.5_
 
-- [ ] 18. Create app navigation and routing
+- [ ] 19. Create app navigation and routing
 
   - Set up Flutter navigation between screens
   - Implement proper back button handling
@@ -186,7 +224,7 @@
   - Write navigation tests
   - _Requirements: 5.1, 4.3_
 
-- [ ] 19. Optimize performance and animations
+- [ ] 20. Optimize performance and animations
 
   - Profile widget rebuilding and optimize unnecessary renders
   - Implement efficient CustomPainter caching
@@ -195,7 +233,7 @@
   - Write performance tests and benchmarks
   - _Requirements: 7.3, 7.4_
 
-- [ ] 20. Add final polish and integration testing
+- [ ] 21. Add final polish and integration testing
   - Implement app icon and splash screen
   - Add final UI polish and consistent theming
   - Create comprehensive integration tests
