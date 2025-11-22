@@ -50,7 +50,7 @@
   - Write unit tests for level generation and validation
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
 
-- [ ] 7. Build persistence layer with Hive and SharedPreferences
+- [x] 7. Build persistence layer with Hive and SharedPreferences
 
   - Set up Hive database for complex game state storage
   - Implement GameProgress and PlayerStats persistence
@@ -59,7 +59,7 @@
   - Write unit tests for save/load operations
   - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
 
-- [ ] 8. Create custom container widget with painting
+- [x] 8. Create custom container widget with painting
 
   - Implement ContainerWidget as StatefulWidget
   - Create ContainerPainter for custom liquid layer rendering
@@ -68,7 +68,7 @@
   - Write widget tests for rendering and interaction
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1_
 
-- [ ] 9. Implement pour animations with AnimationController
+- [x] 9. Implement pour animations with AnimationController
 
   - Create PourAnimation class for animation data
   - Implement AnimationController for liquid transfer effects
