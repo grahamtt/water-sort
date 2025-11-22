@@ -8,23 +8,25 @@ void main() {
       const config = LevelGenerationConfig();
 
       expect(config.containerCapacity, equals(4));
-      expect(config.minEmptyContainers, equals(1));
+      expect(config.minEmptySlots, equals(1));
       expect(config.maxEmptyContainers, equals(3));
       expect(config.minLayersPerContainer, equals(1));
       expect(config.maxLayersPerContainer, equals(4));
       expect(config.seed, isNull);
+      expect(config.maxGenerationAttempts, equals(50));
+      expect(config.maxSolvabilityAttempts, equals(100));
     });
 
     test('should allow custom values', () {
       const config = LevelGenerationConfig(
         containerCapacity: 6,
-        minEmptyContainers: 2,
+        minEmptySlots: 2,
         maxEmptyContainers: 4,
         seed: 12345,
       );
 
       expect(config.containerCapacity, equals(6));
-      expect(config.minEmptyContainers, equals(2));
+      expect(config.minEmptySlots, equals(2));
       expect(config.maxEmptyContainers, equals(4));
       expect(config.seed, equals(12345));
     });
@@ -70,7 +72,7 @@ void main() {
     });
 
     test('should throw error for invalid parameters', () {
-      // Too few containers for colors + empty containers
+      // Too few containers for colors + empty slots
       expect(() => generator.generateLevel(1, 3, 3, 3), throwsArgumentError);
 
       // Too many colors
@@ -181,10 +183,10 @@ void main() {
     });
 
     test('should handle edge cases in level generation', () {
-      // Minimum viable level
-      final minLevel = generator.generateLevel(1, 1, 3, 1);
-      expect(minLevel.containerCount, equals(3));
-      expect(minLevel.colorCount, equals(1));
+      // Minimum viable level (need at least 2 containers for 1 color + 1 empty slot)
+      final minLevel = generator.generateLevel(1, 1, 4, 2);
+      expect(minLevel.containerCount, equals(4));
+      expect(minLevel.colorCount, equals(2));
       expect(generator.validateLevel(minLevel), isTrue);
 
       // Complex level

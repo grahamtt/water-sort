@@ -2,6 +2,7 @@ import '../models/game_state.dart';
 import '../models/pour_result.dart';
 import '../models/container.dart';
 import '../models/move.dart';
+import 'audio_manager.dart';
 
 /// Abstract base class for the water sort puzzle game engine
 abstract class GameEngine {
@@ -29,6 +30,7 @@ abstract class GameEngine {
 
 /// Concrete implementation of the game engine
 class WaterSortGameEngine implements GameEngine {
+  final AudioManager _audioManager = AudioManager();
   @override
   GameState initializeLevel(int levelId, List<Container> containers) {
     // Create deep copies of containers to avoid reference issues
@@ -46,12 +48,19 @@ class WaterSortGameEngine implements GameEngine {
     final validationResult = validatePour(currentState, fromContainerId, toContainerId);
     
     if (validationResult.isFailure) {
+      // Play error sound and haptic feedback for invalid moves
+      _audioManager.playErrorSound();
+      _audioManager.lightHaptic();
       return validationResult;
     }
     
     // If validation passed, execute the pour
     final sourceContainer = currentState.getContainer(fromContainerId)!;
     final liquidToPour = sourceContainer.getTopContinuousLayer()!;
+    
+    // Play pour sound and haptic feedback for successful moves
+    _audioManager.playPourSound();
+    _audioManager.mediumHaptic();
     
     final move = Move(
       fromContainerId: fromContainerId,

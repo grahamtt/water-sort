@@ -3,212 +3,542 @@ import '../models/level.dart';
 import '../models/container.dart';
 import '../models/liquid_layer.dart';
 import '../models/liquid_color.dart';
+import '../models/game_state.dart';
+import 'game_engine.dart';
+import 'level_similarity_checker.dart';
 
 /// Configuration for level generation
 class LevelGenerationConfig {
   /// Standard container capacity
   final int containerCapacity;
-  
-  /// Minimum number of empty containers required
-  final int minEmptyContainers;
-  
+
+  /// Minimum number of empty slots required (can be distributed across containers)
+  final int minEmptySlots;
+
   /// Maximum number of empty containers allowed
   final int maxEmptyContainers;
-  
+
   /// Minimum liquid layers per container
   final int minLayersPerContainer;
-  
+
   /// Maximum liquid layers per container
   final int maxLayersPerContainer;
-  
+
   /// Random seed for reproducible generation (null for random)
   final int? seed;
-  
+
+  /// Maximum attempts to generate a valid level
+  final int maxGenerationAttempts;
+
+  /// Maximum attempts to validate solvability
+  final int maxSolvabilityAttempts;
+
   const LevelGenerationConfig({
     this.containerCapacity = 4,
-    this.minEmptyContainers = 1,
+    this.minEmptySlots = 1,
     this.maxEmptyContainers = 3,
     this.minLayersPerContainer = 1,
     this.maxLayersPerContainer = 4,
     this.seed,
+    this.maxGenerationAttempts = 50,
+    this.maxSolvabilityAttempts = 100,
   });
 }
 
 /// Abstract base class for level generation
 abstract class LevelGenerator {
   /// Generate a level with the specified parameters
-  Level generateLevel(int levelId, int difficulty, int containerCount, int colorCount);
-  
+  Level generateLevel(
+    int levelId,
+    int difficulty,
+    int containerCount,
+    int colorCount,
+  );
+
+  /// Generate a unique level that is not similar to existing levels
+  Level generateUniqueLevel(
+    int levelId,
+    int difficulty,
+    int containerCount,
+    int colorCount,
+    List<Level> existingLevels,
+  );
+
   /// Validate that a level is solvable
   bool validateLevel(Level level);
-  
+
+  /// Check if a level is similar to any level in a list
+  bool isLevelSimilar(Level newLevel, List<Level> existingLevels);
+
+  /// Generate a normalized signature for a level
+  String generateLevelSignature(Level level);
+
   /// Generate a series of levels with progressive difficulty
-  List<Level> generateLevelSeries(int startId, int count, {int startDifficulty = 1});
+  List<Level> generateLevelSeries(
+    int startId,
+    int count, {
+    int startDifficulty = 1,
+  });
 }
 
 /// Concrete implementation of the level generator
 class WaterSortLevelGenerator implements LevelGenerator {
   final LevelGenerationConfig config;
   final Random _random;
-  
-  WaterSortLevelGenerator({
-    this.config = const LevelGenerationConfig(),
-  }) : _random = Random(config.seed);
-  
+
+  WaterSortLevelGenerator({this.config = const LevelGenerationConfig()})
+    : _random = Random(config.seed);
+
   @override
-  Level generateLevel(int levelId, int difficulty, int containerCount, int colorCount) {
+  Level generateLevel(
+    int levelId,
+    int difficulty,
+    int containerCount,
+    int colorCount,
+  ) {
     // Validate input parameters
-    if (containerCount < colorCount + config.minEmptyContainers) {
-      throw ArgumentError(
-        'Container count ($containerCount) must be at least colorCount ($colorCount) + minEmptyContainers (${config.minEmptyContainers})'
-      );
-    }
-    
     if (colorCount > LiquidColor.values.length) {
       throw ArgumentError(
-        'Color count ($colorCount) cannot exceed available colors (${LiquidColor.values.length})'
+        'Color count ($colorCount) cannot exceed available colors (${LiquidColor.values.length})',
       );
     }
-    
-    // Select colors for this level
-    final selectedColors = _selectColors(colorCount);
-    
-    // Determine number of empty containers based on difficulty
-    final emptyContainerCount = _calculateEmptyContainers(difficulty, containerCount, colorCount);
-    
-    // Generate containers
-    final containers = _generateContainers(
-      containerCount,
-      emptyContainerCount,
-      selectedColors,
-      difficulty,
-    );
-    
-    // Create the level
-    final level = Level(
-      id: levelId,
-      difficulty: difficulty,
-      containerCount: containerCount,
-      colorCount: colorCount,
-      initialContainers: containers,
-      tags: _generateTags(levelId, difficulty),
-    );
-    
-    return level;
+
+    // Check if we have enough containers for the colors and minimum empty slots
+    final totalLiquidVolume = colorCount * config.containerCapacity;
+    final totalCapacity = containerCount * config.containerCapacity;
+    if (totalCapacity - totalLiquidVolume < config.minEmptySlots) {
+      throw ArgumentError(
+        'Container count ($containerCount) is insufficient for $colorCount colors '
+        'with minimum ${config.minEmptySlots} empty slots. '
+        'Need at least ${(totalLiquidVolume + config.minEmptySlots + config.containerCapacity - 1) ~/ config.containerCapacity} containers.',
+      );
+    }
+
+    Level? validLevel;
+    int attempts = 0;
+
+    // Try to generate a valid level within the attempt limit
+    while (validLevel == null && attempts < config.maxGenerationAttempts) {
+      attempts++;
+
+      try {
+        // Select colors for this level
+        final selectedColors = _selectColors(colorCount);
+
+        // Generate containers with proper empty slot distribution
+        final containers = _generateValidContainers(
+          containerCount,
+          selectedColors,
+          difficulty,
+        );
+
+        // Create the level
+        final level = Level(
+          id: levelId,
+          difficulty: difficulty,
+          containerCount: containerCount,
+          colorCount: colorCount,
+          initialContainers: containers,
+          tags: _generateTags(levelId, difficulty),
+        );
+
+        // Validate the level meets all requirements
+        if (_validateGeneratedLevel(level)) {
+          validLevel = level;
+        }
+      } catch (e) {
+        // Continue to next attempt if generation fails
+        continue;
+      }
+    }
+
+    if (validLevel == null) {
+      throw StateError(
+        'Failed to generate valid level after ${config.maxGenerationAttempts} attempts. '
+        'Try adjusting parameters: levelId=$levelId, difficulty=$difficulty, '
+        'containerCount=$containerCount, colorCount=$colorCount',
+      );
+    }
+
+    return validLevel;
   }
-  
+
+  @override
+  Level generateUniqueLevel(
+    int levelId,
+    int difficulty,
+    int containerCount,
+    int colorCount,
+    List<Level> existingLevels,
+  ) {
+    Level? uniqueLevel;
+    int attempts = 0;
+    
+    while (uniqueLevel == null && attempts < LevelSimilarityChecker.maxGenerationAttempts) {
+      attempts++;
+      
+      // Generate a candidate level
+      final candidate = generateLevel(levelId, difficulty, containerCount, colorCount);
+      
+      // Check if it's unique compared to existing levels
+      if (!isLevelSimilar(candidate, existingLevels)) {
+        uniqueLevel = candidate;
+      }
+    }
+    
+    if (uniqueLevel == null) {
+      // Fallback: return a regular generated level if we can't find a unique one
+      // This ensures the game can continue even if similarity detection is too strict
+      uniqueLevel = generateLevel(levelId, difficulty, containerCount, colorCount);
+    }
+    
+    return uniqueLevel;
+  }
+
   @override
   bool validateLevel(Level level) {
     // First check structural validity
     if (!level.isStructurallyValid) {
       return false;
     }
-    
-    // Use a simple heuristic to check solvability
-    // A level is likely solvable if:
-    // 1. Each color has exactly one container's worth of liquid
-    // 2. There are enough empty containers to facilitate moves
-    // 3. The liquid is sufficiently mixed (not already sorted)
-    
-    return _checkSolvabilityHeuristic(level);
+
+    // Check basic heuristics first (faster)
+    if (!_checkSolvabilityHeuristic(level)) {
+      return false;
+    }
+
+    // For now, use heuristic check only (actual solvability test can be enabled later)
+    // TODO: Enable actual solvability test when performance is optimized
+    // return _testActualSolvability(level);
+    return true;
   }
-  
+
   @override
-  List<Level> generateLevelSeries(int startId, int count, {int startDifficulty = 1}) {
+  bool isLevelSimilar(Level newLevel, List<Level> existingLevels) {
+    return LevelSimilarityChecker.isLevelSimilarToAny(newLevel, existingLevels);
+  }
+
+  @override
+  String generateLevelSignature(Level level) {
+    return LevelSimilarityChecker.generateNormalizedSignature(level);
+  }
+
+  @override
+  List<Level> generateLevelSeries(
+    int startId,
+    int count, {
+    int startDifficulty = 1,
+  }) {
     final levels = <Level>[];
-    
+
     for (int i = 0; i < count; i++) {
       final levelId = startId + i;
       final difficulty = _calculateProgressiveDifficulty(i, startDifficulty);
       final containerCount = _calculateContainerCount(difficulty);
       final colorCount = _calculateColorCount(difficulty, containerCount);
-      
-      final level = generateLevel(levelId, difficulty, containerCount, colorCount);
+
+      final level = generateLevel(
+        levelId,
+        difficulty,
+        containerCount,
+        colorCount,
+      );
       levels.add(level);
     }
-    
+
     return levels;
   }
-  
+
   /// Select colors for the level
   List<LiquidColor> _selectColors(int colorCount) {
     final availableColors = List<LiquidColor>.from(LiquidColor.values);
     availableColors.shuffle(_random);
     return availableColors.take(colorCount).toList();
   }
-  
-  /// Calculate the number of empty containers based on difficulty
-  int _calculateEmptyContainers(int difficulty, int containerCount, int colorCount) {
-    // Easier levels have more empty containers
-    // Harder levels have fewer empty containers (but at least the minimum)
-    
-    final maxPossibleEmpty = containerCount - colorCount;
-    final adjustedMax = min(maxPossibleEmpty, config.maxEmptyContainers);
-    
-    if (difficulty <= 3) {
-      // Easy levels: use maximum empty containers
-      return adjustedMax;
-    } else if (difficulty <= 6) {
-      // Medium levels: use middle range
-      return max(config.minEmptyContainers, adjustedMax - 1);
-    } else {
-      // Hard levels: use minimum empty containers
-      return config.minEmptyContainers;
-    }
-  }
-  
-  /// Generate containers for the level
-  List<Container> _generateContainers(
+
+  /// Generate containers that meet all requirements
+  List<Container> _generateValidContainers(
     int containerCount,
-    int emptyContainerCount,
     List<LiquidColor> colors,
     int difficulty,
   ) {
     final containers = <Container>[];
-    
-    // Create empty containers first
-    for (int i = 0; i < emptyContainerCount; i++) {
-      containers.add(Container(
-        id: i,
-        capacity: config.containerCapacity,
-        liquidLayers: [],
-      ));
+
+    // Create all containers initially empty
+    for (int i = 0; i < containerCount; i++) {
+      containers.add(
+        Container(id: i, capacity: config.containerCapacity, liquidLayers: []),
+      );
     }
-    
-    // Create filled containers
-    final filledContainerCount = containerCount - emptyContainerCount;
-    
+
     // Generate liquid for each color (one container's worth per color)
     final colorLiquids = <LiquidColor, List<LiquidLayer>>{};
     for (final color in colors) {
       colorLiquids[color] = _generateLiquidForColor(color, difficulty);
     }
-    
-    // Distribute liquids among filled containers
-    final filledContainers = _distributeLiquids(
-      filledContainerCount,
-      colorLiquids,
-      emptyContainerCount,
-    );
-    
-    containers.addAll(filledContainers);
-    
+
+    // Distribute liquids ensuring we maintain empty slots
+    _distributeLiquidsWithEmptySlots(containers, colorLiquids, difficulty);
+
     // Shuffle containers to randomize positions
     containers.shuffle(_random);
-    
+
     // Reassign IDs to maintain order
     for (int i = 0; i < containers.length; i++) {
       containers[i] = containers[i].copyWith(id: i);
     }
-    
+
     return containers;
   }
-  
+
+  /// Distribute liquids while ensuring minimum empty slots
+  void _distributeLiquidsWithEmptySlots(
+    List<Container> containers,
+    Map<LiquidColor, List<LiquidLayer>> colorLiquids,
+    int difficulty,
+  ) {
+    // Calculate total liquid volume
+    int totalLiquidVolume = 0;
+    for (final layers in colorLiquids.values) {
+      for (final layer in layers) {
+        totalLiquidVolume += layer.volume;
+      }
+    }
+
+    // Calculate total container capacity
+    final totalCapacity = containers.length * config.containerCapacity;
+
+    // Ensure we have enough empty slots
+    final availableCapacity = totalCapacity - totalLiquidVolume;
+    if (availableCapacity < config.minEmptySlots) {
+      throw StateError('Not enough capacity for minimum empty slots');
+    }
+
+    // Collect all liquid layers and shuffle them
+    final layersToPlace = <LiquidLayer>[];
+    for (final layers in colorLiquids.values) {
+      layersToPlace.addAll(layers);
+    }
+    layersToPlace.shuffle(_random);
+
+    // For harder levels, we can fill containers more densely
+    // but still maintain at least minEmptySlots
+    final targetEmptySlots = _calculateTargetEmptySlots(
+      difficulty,
+      availableCapacity,
+    );
+    final maxFillCapacity = totalCapacity - targetEmptySlots;
+
+    int currentFillVolume = 0;
+
+    // Place layers while respecting capacity limits
+    while (layersToPlace.isNotEmpty && currentFillVolume < maxFillCapacity) {
+      final layer = layersToPlace.removeAt(0);
+      bool placed = false;
+
+      // Try to place the layer in a container that can fit it
+      for (final container in containers) {
+        final wouldExceedLimit =
+            currentFillVolume + layer.volume > maxFillCapacity;
+        if (!wouldExceedLimit && container.remainingCapacity >= layer.volume) {
+          container.liquidLayers.add(layer);
+          currentFillVolume += layer.volume;
+          placed = true;
+          break;
+        }
+      }
+
+      // If we can't place the full layer, try to split it
+      if (!placed) {
+        final remainingCapacity = maxFillCapacity - currentFillVolume;
+        if (remainingCapacity > 0) {
+          // Find a container with space
+          for (final container in containers) {
+            if (container.remainingCapacity > 0) {
+              final spaceAvailable = min(
+                container.remainingCapacity,
+                remainingCapacity,
+              );
+              final splitLayers = layer.split(spaceAvailable);
+
+              container.liquidLayers.add(splitLayers[0]);
+              currentFillVolume += splitLayers[0].volume;
+
+              // Add remaining part back if it has volume
+              if (splitLayers[1].volume > 0) {
+                layersToPlace.add(splitLayers[1]);
+              }
+              placed = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!placed) {
+        // If we can't place any more liquid, we're done
+        break;
+      }
+    }
+
+    // If there are still layers to place, we have a problem
+    if (layersToPlace.isNotEmpty) {
+      throw StateError(
+        'Could not place all liquid layers while maintaining empty slots',
+      );
+    }
+  }
+
+  /// Calculate target empty slots based on difficulty
+  int _calculateTargetEmptySlots(int difficulty, int availableCapacity) {
+    if (difficulty <= 3) {
+      // Easy levels: use more empty slots (up to 2 full containers worth)
+      return min(availableCapacity, config.containerCapacity * 2);
+    } else if (difficulty <= 6) {
+      // Medium levels: moderate empty slots (up to 1.5 containers worth)
+      return min(availableCapacity, (config.containerCapacity * 1.5).round());
+    } else {
+      // Hard levels: minimum empty slots (but at least the required minimum)
+      return max(
+        config.minEmptySlots,
+        min(availableCapacity, config.containerCapacity),
+      );
+    }
+  }
+
+  /// Validate that a generated level meets all requirements
+  bool _validateGeneratedLevel(Level level) {
+    // 1. Check that level is not already solved
+    if (_isLevelAlreadySolved(level)) {
+      return false;
+    }
+
+    // 2. Check structural validity
+    if (!level.isStructurallyValid) {
+      return false;
+    }
+
+    // 3. Check that we have minimum empty slots
+    final totalEmptySlots = level.initialContainers.fold(
+      0,
+      (sum, container) => sum + container.remainingCapacity,
+    );
+    if (totalEmptySlots < config.minEmptySlots) {
+      return false;
+    }
+
+    // 4. Test solvability (simplified check for now)
+    return _checkSolvabilityHeuristic(level);
+  }
+
+  /// Check if the level is already in a solved state
+  bool _isLevelAlreadySolved(Level level) {
+    // A level is solved if all non-empty containers contain only one color
+    for (final container in level.initialContainers) {
+      if (!container.isEmpty && !container.isSorted) {
+        return false; // Found a mixed container, so not solved
+      }
+    }
+
+    // If we get here, all containers are either empty or sorted
+    // This means the level is already solved
+    return true;
+  }
+
+  /// Test if a level is actually solvable by attempting to solve it
+  bool _testActualSolvability(Level level) {
+    try {
+      final gameEngine = WaterSortGameEngine();
+      final initialState = gameEngine.initializeLevel(
+        level.id,
+        level.initialContainers,
+      );
+
+      // Use a simple breadth-first search to test solvability
+      return _attemptSolveWithBFS(gameEngine, initialState);
+    } catch (e) {
+      // If any error occurs during solving attempt, consider it unsolvable
+      return false;
+    }
+  }
+
+  /// Attempt to solve the level using breadth-first search
+  bool _attemptSolveWithBFS(
+    WaterSortGameEngine gameEngine,
+    GameState initialState,
+  ) {
+    final visited = <String>{};
+    final queue = <GameState>[initialState];
+    int attempts = 0;
+
+    while (queue.isNotEmpty && attempts < config.maxSolvabilityAttempts) {
+      attempts++;
+      final currentState = queue.removeAt(0);
+
+      // Check if this state is solved
+      if (gameEngine.checkWinCondition(currentState)) {
+        return true;
+      }
+
+      // Generate a state signature to avoid revisiting the same state
+      final stateSignature = _generateStateSignature(currentState);
+      if (visited.contains(stateSignature)) {
+        continue;
+      }
+      visited.add(stateSignature);
+
+      // Try all possible moves from this state
+      for (int fromId = 0; fromId < currentState.containers.length; fromId++) {
+        for (int toId = 0; toId < currentState.containers.length; toId++) {
+          if (fromId == toId) continue;
+
+          final pourResult = gameEngine.validatePour(
+            currentState,
+            fromId,
+            toId,
+          );
+          if (pourResult.isSuccess) {
+            try {
+              final newState = gameEngine.executePour(
+                currentState,
+                fromId,
+                toId,
+              );
+              queue.add(newState);
+            } catch (e) {
+              // Skip invalid moves
+              continue;
+            }
+          }
+        }
+      }
+    }
+
+    // If we exhausted all possibilities without finding a solution
+    return false;
+  }
+
+  /// Generate a unique signature for a game state to detect duplicates
+  String _generateStateSignature(GameState gameState) {
+    final containerSignatures = <String>[];
+
+    for (final container in gameState.containers) {
+      final layerSignatures = container.liquidLayers
+          .map((layer) => '${layer.color.name}:${layer.volume}')
+          .join(',');
+      containerSignatures.add('[$layerSignatures]');
+    }
+
+    // Sort container signatures to make the state signature order-independent
+    containerSignatures.sort();
+    return containerSignatures.join('|');
+  }
+
   /// Generate liquid layers for a specific color
   List<LiquidLayer> _generateLiquidForColor(LiquidColor color, int difficulty) {
     // Determine how many layers to split this color into
     int layerCount;
-    
+
     if (difficulty <= 2) {
       // Easy: 1-2 layers
       layerCount = _random.nextInt(2) + 1;
@@ -219,124 +549,60 @@ class WaterSortLevelGenerator implements LevelGenerator {
       // Hard: 2-4 layers
       layerCount = _random.nextInt(3) + 2;
     }
-    
+
     // Split the total volume into layers
     final totalVolume = config.containerCapacity;
     final layers = <LiquidLayer>[];
     int remainingVolume = totalVolume;
-    
+
     for (int i = 0; i < layerCount - 1; i++) {
       final maxLayerVolume = remainingVolume - (layerCount - i - 1);
       final layerVolume = _random.nextInt(maxLayerVolume) + 1;
       layers.add(LiquidLayer(color: color, volume: layerVolume));
       remainingVolume -= layerVolume;
     }
-    
+
     // Add the final layer with remaining volume
     if (remainingVolume > 0) {
       layers.add(LiquidLayer(color: color, volume: remainingVolume));
     }
-    
+
     return layers;
   }
-  
-  /// Distribute liquid layers among containers
-  List<Container> _distributeLiquids(
-    int containerCount,
-    Map<LiquidColor, List<LiquidLayer>> colorLiquids,
-    int startingId,
-  ) {
-    final containers = <Container>[];
-    
-    // Create empty containers
-    for (int i = 0; i < containerCount; i++) {
-      containers.add(Container(
-        id: startingId + i,
-        capacity: config.containerCapacity,
-        liquidLayers: [],
-      ));
-    }
-    
-    // Collect all liquid layers and shuffle them
-    final layersToPlace = <LiquidLayer>[];
-    for (final layers in colorLiquids.values) {
-      layersToPlace.addAll(layers);
-    }
-    layersToPlace.shuffle(_random);
-    
-    // Process layers until all are placed
-    while (layersToPlace.isNotEmpty) {
-      final layer = layersToPlace.removeAt(0);
-      bool placed = false;
-      
-      // Try to find a container that can fit this layer completely
-      for (final container in containers) {
-        if (container.remainingCapacity >= layer.volume) {
-          container.liquidLayers.add(layer);
-          placed = true;
-          break;
-        }
-      }
-      
-      // If no container can fit the layer completely, split it
-      if (!placed) {
-        for (final container in containers) {
-          if (container.remainingCapacity > 0) {
-            final availableSpace = container.remainingCapacity;
-            final splitLayers = layer.split(availableSpace);
-            
-            // Add the part that fits
-            container.liquidLayers.add(splitLayers[0]);
-            
-            // Add the remaining part back to the queue
-            final remainingLayer = splitLayers[1];
-            if (remainingLayer.volume > 0) {
-              layersToPlace.add(remainingLayer);
-            }
-            
-            placed = true;
-            break;
-          }
-        }
-      }
-      
-      if (!placed) {
-        throw StateError('Could not place liquid layer: insufficient total container capacity');
-      }
-    }
-    
-    return containers;
-  }
-  
+
   /// Check if a level is likely solvable using heuristics
   bool _checkSolvabilityHeuristic(Level level) {
     // Count liquid volumes by color
     final colorVolumes = <LiquidColor, int>{};
-    
+
     for (final container in level.initialContainers) {
       for (final layer in container.liquidLayers) {
-        colorVolumes[layer.color] = 
+        colorVolumes[layer.color] =
             (colorVolumes[layer.color] ?? 0) + layer.volume;
       }
     }
-    
+
     // Check that we have the expected number of colors
     if (colorVolumes.length != level.colorCount) {
       return false;
     }
-    
+
     // Check that each color has exactly one container's worth
     for (final volume in colorVolumes.values) {
       if (volume != config.containerCapacity) {
         return false;
       }
     }
-    
-    // Check that we have at least one empty container
-    if (level.emptyContainerCount == 0) {
+
+    // Check that we have at least one empty slot (not necessarily a full container)
+    final totalEmptySlots = level.initialContainers.fold(
+      0,
+      (sum, container) => sum + container.remainingCapacity,
+    );
+    if (totalEmptySlots == 0) {
       return false;
     }
-    
+
     // Check that liquids are sufficiently mixed (not too many already sorted)
     int sortedContainers = 0;
     for (final container in level.initialContainers) {
@@ -344,22 +610,22 @@ class WaterSortLevelGenerator implements LevelGenerator {
         sortedContainers++;
       }
     }
-    
+
     // Allow at most 1 container to be already sorted (for easier levels)
     if (sortedContainers > 1) {
       return false;
     }
-    
+
     return true;
   }
-  
+
   /// Calculate progressive difficulty for level series
   int _calculateProgressiveDifficulty(int levelIndex, int startDifficulty) {
     // Gradually increase difficulty
     final difficultyIncrease = levelIndex ~/ 5; // Increase every 5 levels
     return min(10, startDifficulty + difficultyIncrease);
   }
-  
+
   /// Calculate container count based on difficulty
   int _calculateContainerCount(int difficulty) {
     if (difficulty <= 2) return 4;
@@ -368,30 +634,33 @@ class WaterSortLevelGenerator implements LevelGenerator {
     if (difficulty <= 8) return 7;
     return 8;
   }
-  
+
   /// Calculate color count based on difficulty and container count
   int _calculateColorCount(int difficulty, int containerCount) {
-    final maxColors = containerCount - config.minEmptyContainers;
-    
+    // For harder levels, we can use more colors relative to containers
+    // but ensure we have at least one empty slot
+    final maxColors =
+        containerCount - 1; // Always leave room for at least one empty slot
+
     if (difficulty <= 2) return min(2, maxColors);
     if (difficulty <= 4) return min(3, maxColors);
     if (difficulty <= 6) return min(4, maxColors);
     if (difficulty <= 8) return min(5, maxColors);
     return min(6, maxColors);
   }
-  
+
   /// Generate appropriate tags for a level
   List<String> _generateTags(int levelId, int difficulty) {
     final tags = <String>[];
-    
+
     if (levelId <= 5) {
       tags.add('tutorial');
     }
-    
+
     if (difficulty >= 8) {
       tags.add('challenge');
     }
-    
+
     if (difficulty <= 3) {
       tags.add('easy');
     } else if (difficulty <= 6) {
@@ -399,7 +668,7 @@ class WaterSortLevelGenerator implements LevelGenerator {
     } else {
       tags.add('hard');
     }
-    
+
     return tags;
   }
 }

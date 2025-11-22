@@ -102,3 +102,30 @@ The Water Sort Puzzle app is a cross-platform mobile game where players sort col
 3. WHEN I restart the app THEN the system SHALL restore my last game state and progress
 4. WHEN I unlock new levels THEN the system SHALL persist the unlock status
 5. IF the app crashes THEN the system SHALL recover the last saved state when restarted
+
+### Requirement 9
+
+**User Story:** As a player, I want generated levels to be properly designed puzzles, so that I always have a meaningful challenge that can be solved.
+
+#### Acceptance Criteria
+
+1. WHEN the system generates a level THEN the system SHALL ensure the level is not already in a solved state
+2. WHEN the system generates a level THEN the system SHALL provide only the minimum number of empty slots or containers needed to solve the puzzle, ensuring optimal difficulty without excess empty space
+3. WHEN the system generates a level THEN the system SHALL verify the level is solvable before presenting it to the player
+4. IF a generated level cannot be solved THEN the system SHALL regenerate until a valid puzzle is created
+5. WHEN testing level solvability THEN the system SHALL use automated solving algorithms to confirm a solution exists
+6. WHEN the system generates a new level THEN the system SHALL ensure it is substantially different from all previously generated levels in the current session
+7. WHEN comparing level similarity THEN the system SHALL consider two levels substantially different if they have different color arrangements that cannot be made equivalent through simple color substitution or changing container order
+8. IF a generated level is too similar to a previous level THEN the system SHALL regenerate until a sufficiently different level is created
+
+### Requirement 10
+
+**User Story:** As a player, I want to be able to start my next move immediately after making a move, so that I can play fluidly without waiting for animations to complete.
+
+#### Acceptance Criteria
+
+1. WHEN I make a valid pour move THEN the system SHALL immediately update the game state and allow the next move to be initiated
+2. WHEN animations are playing THEN the system SHALL still accept and queue new move inputs
+3. WHEN I tap containers during an animation THEN the system SHALL respond to selection and move commands without delay
+4. IF I start a new move while a previous animation is playing THEN the system SHALL complete the previous animation instantly and begin the new move
+5. WHEN multiple moves are made rapidly THEN the system SHALL maintain game state consistency while allowing fluid gameplay

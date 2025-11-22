@@ -17,27 +17,27 @@ graph TB
         Widgets[Custom Widgets]
         Animations[Animation Controllers]
     end
-    
+
     subgraph "Business Logic"
         GameEngine[Game Engine]
         PuzzleLogic[Puzzle Logic]
         StateManager[State Manager]
         LevelManager[Level Manager]
     end
-    
+
     subgraph "Platform Services"
         Storage[Shared Preferences/Hive]
         Audio[Flutter Audio]
         Haptics[Flutter Haptics]
     end
-    
+
     UI --> GameEngine
     Widgets --> StateManager
     Animations --> PuzzleLogic
     GameEngine --> PuzzleLogic
     GameEngine --> StateManager
     GameEngine --> LevelManager
-    
+
     GameEngine --> Storage
     UI --> Audio
     UI --> Haptics
@@ -46,17 +46,20 @@ graph TB
 ### Technology Stack
 
 **Flutter Framework:** Dart
+
 - Single codebase for iOS and Android
 - Custom widgets for game UI components
 - Built-in animation system for smooth liquid effects
 - Platform channels for native functionality when needed
 
 **State Management:** Provider/Riverpod
+
 - Reactive state management for game state
 - Efficient widget rebuilding
 - Clean separation of business logic and UI
 
 **Storage:** Hive + Shared Preferences
+
 - Hive for complex game state persistence
 - Shared Preferences for simple settings
 - Cross-platform compatibility
@@ -66,6 +69,7 @@ graph TB
 ### Core Game Engine
 
 **GameEngine**
+
 ```dart
 abstract class GameEngine {
   GameState initializeLevel(int levelId);
@@ -79,18 +83,19 @@ abstract class GameEngine {
 ```
 
 **Container Model**
+
 ```dart
 class Container {
   final int id;
   final int capacity;
   final List<LiquidLayer> liquidLayers;
-  
+
   Container({
     required this.id,
     required this.capacity,
     required this.liquidLayers,
   });
-  
+
   bool canAcceptPour(LiquidColor liquidColor) { /* implementation */ }
   LiquidLayer? getTopLayer() { /* implementation */ }
   void addLiquid(LiquidLayer layer) { /* implementation */ }
@@ -100,12 +105,13 @@ class Container {
 class LiquidLayer {
   final LiquidColor color;
   final int volume;
-  
+
   LiquidLayer({required this.color, required this.volume});
 }
 ```
 
 **Game State Management**
+
 ```dart
 class GameState {
   final int levelId;
@@ -113,7 +119,7 @@ class GameState {
   final List<Move> moveHistory;
   final bool isCompleted;
   final int moveCount;
-  
+
   GameState({
     required this.levelId,
     required this.containers,
@@ -128,7 +134,7 @@ class Move {
   final int toContainer;
   final LiquidLayer liquidMoved;
   final DateTime timestamp;
-  
+
   Move({
     required this.fromContainer,
     required this.toContainer,
@@ -141,19 +147,20 @@ class Move {
 ### Flutter UI Components
 
 **Container Widget**
+
 ```dart
 class ContainerWidget extends StatefulWidget {
   final Container container;
   final bool isSelected;
   final VoidCallback onTap;
-  
+
   const ContainerWidget({
     Key? key,
     required this.container,
     required this.isSelected,
     required this.onTap,
   }) : super(key: key);
-  
+
   @override
   _ContainerWidgetState createState() => _ContainerWidgetState();
 }
@@ -162,7 +169,7 @@ class _ContainerWidgetState extends State<ContainerWidget>
     with TickerProviderStateMixin {
   late AnimationController _pourController;
   late AnimationController _selectionController;
-  
+
   @override
   Widget build(BuildContext context) {
     // Flutter implementation with custom painting
@@ -184,11 +191,15 @@ class _ContainerWidgetState extends State<ContainerWidget>
 
 ### Level Management System
 
-**Level Generator**
+**Level Generator with Similarity Detection**
+
 ```dart
 abstract class LevelGenerator {
   Level generateLevel(int difficulty, int colorCount, int containerCount);
+  Level generateUniqueLevel(int difficulty, int colorCount, int containerCount, List<Level> previousLevels);
   bool validateLevel(Level level);
+  bool isLevelSimilar(Level newLevel, List<Level> previousLevels);
+  String generateLevelSignature(Level level);
 }
 
 class Level {
@@ -197,14 +208,117 @@ class Level {
   final List<Container> initialState;
   final int minimumMoves;
   final int? maxMoves;
-  
+  final String signature;
+
   Level({
     required this.id,
     required this.difficulty,
     required this.initialState,
     required this.minimumMoves,
     this.maxMoves,
+    required this.signature,
   });
+}
+
+class LevelSimilarityChecker {
+  static const double similarityThreshold = 0.8;
+  static const int maxGenerationAttempts = 50;
+
+  static bool areLevelsSimilar(Level level1, Level level2) {
+    // Compare structural patterns independent of specific colors
+    return _compareStructuralPatterns(level1, level2) > similarityThreshold;
+  }
+
+  static double _compareStructuralPatterns(Level level1, Level level2) {
+    // Normalize both levels to color-agnostic patterns
+    final pattern1 = _normalizeToPattern(level1);
+    final pattern2 = _normalizeToPattern(level2);
+
+    // Calculate similarity score based on:
+    // 1. Container count and arrangement
+    // 2. Layer distribution patterns
+    // 3. Color mixing patterns (independent of actual colors)
+    return _calculatePatternSimilarity(pattern1, pattern2);
+  }
+
+  static String generateNormalizedSignature(Level level) {
+    // Create color-agnostic signature representing the level structure
+    // Format: "containers:4|pattern:ABAB,BABA,EMPTY,EMPTY"
+    // Where A, B represent normalized color positions
+    final containers = level.initialState;
+    final normalizedContainers = _normalizeColors(containers);
+
+    return "containers:${containers.length}|pattern:${normalizedContainers.join(',')}";
+  }
+
+  static List<String> _normalizeColors(List<Container> containers) {
+    // Convert actual colors to normalized patterns (A, B, C, etc.)
+    final colorMap = <LiquidColor, String>{};
+    var nextColorLabel = 'A';
+
+    return containers.map((container) {
+      if (container.liquidLayers.isEmpty) return 'EMPTY';
+
+      return container.liquidLayers.map((layer) {
+        if (!colorMap.containsKey(layer.color)) {
+          colorMap[layer.color] = nextColorLabel;
+          nextColorLabel = String.fromCharCode(nextColorLabel.codeUnitAt(0) + 1);
+        }
+        return colorMap[layer.color]! * layer.volume;
+      }).join('');
+    }).toList();
+  }
+
+  static double _calculatePatternSimilarity(List<String> pattern1, List<String> pattern2) {
+    if (pattern1.length != pattern2.length) return 0.0;
+
+    int matches = 0;
+    for (int i = 0; i < pattern1.length; i++) {
+      if (pattern1[i] == pattern2[i]) matches++;
+    }
+
+    return matches / pattern1.length;
+  }
+
+  static List<String> _normalizeToPattern(Level level) {
+    return _normalizeColors(level.initialState);
+  }
+}
+
+class LevelGenerationService {
+  final LevelGenerator _generator;
+  final List<Level> _sessionLevels = [];
+
+  LevelGenerationService(this._generator);
+
+  Future<Level> generateNextLevel(int difficulty, int colorCount, int containerCount) async {
+    Level? uniqueLevel;
+    int attempts = 0;
+
+    while (uniqueLevel == null && attempts < LevelSimilarityChecker.maxGenerationAttempts) {
+      final candidate = _generator.generateLevel(difficulty, colorCount, containerCount);
+
+      if (!_generator.isLevelSimilar(candidate, _sessionLevels)) {
+        uniqueLevel = candidate;
+        _sessionLevels.add(uniqueLevel);
+      }
+
+      attempts++;
+    }
+
+    if (uniqueLevel == null) {
+      // Fallback: clear session history and generate fresh
+      _sessionLevels.clear();
+      uniqueLevel = _generator.generateLevel(difficulty, colorCount, containerCount);
+      _sessionLevels.add(uniqueLevel);
+    }
+
+    return uniqueLevel;
+  }
+
+  void clearSessionHistory() {
+    _sessionLevels.clear();
+  }
 }
 ```
 
@@ -213,6 +327,7 @@ class Level {
 ### Core Data Structures
 
 **Color System**
+
 ```dart
 enum LiquidColor {
   red(0xFFFF0000, "Red"),
@@ -223,16 +338,17 @@ enum LiquidColor {
   orange(0xFFFFA500, "Orange"),
   pink(0xFFFFC0CB, "Pink"),
   cyan(0xFF00FFFF, "Cyan");
-  
+
   const LiquidColor(this.rgb, this.name);
   final int rgb;
   final String name;
-  
+
   Color get color => Color(rgb);
 }
 ```
 
 **Persistence Models**
+
 ```dart
 @JsonSerializable()
 class GameProgress {
@@ -240,15 +356,15 @@ class GameProgress {
   final Set<int> completedLevels;
   final int? currentLevel;
   final GameState? savedGameState;
-  
+
   GameProgress({
     required this.unlockedLevels,
     required this.completedLevels,
     this.currentLevel,
     this.savedGameState,
   });
-  
-  factory GameProgress.fromJson(Map<String, dynamic> json) => 
+
+  factory GameProgress.fromJson(Map<String, dynamic> json) =>
       _$GameProgressFromJson(json);
   Map<String, dynamic> toJson() => _$GameProgressToJson(this);
 }
@@ -259,15 +375,15 @@ class PlayerStats {
   final int perfectSolutions;
   final int totalPlayTime;
   final double averageMovesPerLevel;
-  
+
   PlayerStats({
     required this.totalMoves,
     required this.perfectSolutions,
     required this.totalPlayTime,
     required this.averageMovesPerLevel,
   });
-  
-  factory PlayerStats.fromJson(Map<String, dynamic> json) => 
+
+  factory PlayerStats.fromJson(Map<String, dynamic> json) =>
       _$PlayerStatsFromJson(json);
   Map<String, dynamic> toJson() => _$PlayerStatsToJson(this);
 }
@@ -276,6 +392,7 @@ class PlayerStats {
 ### Animation Models
 
 **Pour Animation Data**
+
 ```dart
 class PourAnimation {
   final int fromContainer;
@@ -283,13 +400,15 @@ class PourAnimation {
   final LiquidColor liquidColor;
   final int volume;
   final Duration duration;
-  
+  final bool canBeInterrupted;
+
   PourAnimation({
     required this.fromContainer,
     required this.toContainer,
     required this.liquidColor,
     required this.volume,
     this.duration = const Duration(milliseconds: 800),
+    this.canBeInterrupted = true,
   });
 }
 
@@ -310,6 +429,34 @@ class VictoryState extends AnimationState {
   final Duration celebrationDuration;
   const VictoryState(this.celebrationDuration);
 }
+
+class AnimationQueue {
+  final List<PourAnimation> _pendingAnimations = [];
+  PourAnimation? _currentAnimation;
+
+  void addAnimation(PourAnimation animation) {
+    _pendingAnimations.add(animation);
+  }
+
+  void skipCurrentAnimation() {
+    _currentAnimation = null;
+  }
+
+  PourAnimation? getNextAnimation() {
+    if (_pendingAnimations.isNotEmpty) {
+      _currentAnimation = _pendingAnimations.removeAt(0);
+      return _currentAnimation;
+    }
+    return null;
+  }
+
+  void clearQueue() {
+    _pendingAnimations.clear();
+    _currentAnimation = null;
+  }
+
+  bool get hasAnimations => _pendingAnimations.isNotEmpty || _currentAnimation != null;
+}
 ```
 
 ## Error Handling
@@ -317,6 +464,7 @@ class VictoryState extends AnimationState {
 ### Game Logic Errors
 
 **Invalid Move Handling**
+
 ```dart
 abstract class PourResult {
   const PourResult();
@@ -345,6 +493,7 @@ enum PourErrorReason {
 ```
 
 **Error Recovery Strategies**
+
 - Invalid moves trigger visual feedback without changing game state
 - Corrupted save data falls back to level 1 with progress reset notification
 - Animation failures gracefully skip to final state
@@ -353,11 +502,12 @@ enum PourErrorReason {
 ### Flutter Error Handling
 
 **Game Exception Handling**
+
 ```dart
 abstract class GameException implements Exception {
   final String message;
   final dynamic cause;
-  
+
   const GameException(this.message, [this.cause]);
 }
 
@@ -386,20 +536,27 @@ class ErrorHandler {
 ### Unit Testing
 
 **Flutter/Dart Testing**
+
 - Game engine logic validation using `test` package
 - Container state management unit tests
 - Move validation algorithms testing
 - Level generation and validation tests
+- Level similarity detection algorithm tests
+- Pattern normalization and signature generation tests
 - JSON serialization/deserialization tests
 
 **Test Coverage Requirements**
+
 - 90%+ coverage for core game logic
 - 100% coverage for move validation
+- 100% coverage for level similarity detection
 - Edge case testing for all container operations
+- Comprehensive testing of pattern matching edge cases
 
 ### Widget Testing
 
 **Flutter Widget Tests**
+
 - Container widget rendering tests using `flutter_test`
 - Animation controller behavior tests
 - Touch gesture recognition tests
@@ -409,6 +566,7 @@ class ErrorHandler {
 ### Integration Testing
 
 **Cross-Platform Consistency**
+
 - Identical game behavior across platforms
 - Save/load compatibility between platforms
 - Performance benchmarking (60fps target)
@@ -417,12 +575,14 @@ class ErrorHandler {
 ### Performance Testing
 
 **Animation Performance**
+
 - Liquid pour animations maintain 60fps
 - Container rendering scales with device capabilities
 - Memory usage stays under 100MB during gameplay
 - Battery usage optimization for extended play sessions
 
 **Load Testing**
+
 - Game state persistence under various conditions
 - Level loading performance with increasing complexity
 - Undo/redo operations with large move histories
@@ -432,20 +592,32 @@ class ErrorHandler {
 ### Animation System
 
 **Flutter Animation Framework**
+
 - Use `AnimationController` with `Tween` for smooth liquid transitions
 - Implement custom `CustomPainter` for liquid layer rendering
 - Leverage `AnimatedBuilder` for efficient widget rebuilding
 - Use `HapticFeedback.lightImpact()` for tactile move confirmation
 
+**Non-Blocking UI Architecture**
+
+- Separate game state updates from animation rendering
+- Implement animation queue system for managing multiple concurrent animations
+- Allow animation interruption when new moves are initiated
+- Use `StreamController` for decoupling game logic from UI animations
+- Maintain responsive touch handling during animation playback
+
 **Animation Performance**
+
 - `SingleTickerProviderStateMixin` for simple animations
 - `TickerProviderStateMixin` for multiple concurrent animations
 - `AnimatedContainer` for simple property animations
 - Custom interpolation curves for realistic liquid physics
+- Animation skipping/completion for rapid move sequences
 
 ### Storage Strategy
 
 **Cross-Platform Storage**
+
 - `shared_preferences` for simple game settings
 - `hive` for complex game state with efficient serialization
 - `path_provider` for platform-appropriate file locations
@@ -454,6 +626,7 @@ class ErrorHandler {
 ### Platform Integration
 
 **Native Features**
+
 - `flutter/services` for haptic feedback
 - `audioplayers` for cross-platform sound effects
 - `flutter/material` and `flutter/cupertino` for platform-appropriate UI
@@ -462,12 +635,14 @@ class ErrorHandler {
 ### Performance Optimizations
 
 **Rendering Optimizations**
+
 - Lazy loading of level data
 - Efficient container redraw only when state changes
 - Bitmap caching for liquid layer textures
 - GPU acceleration for animation effects
 
 **Memory Management**
+
 - Object pooling for frequently created/destroyed objects
 - Efficient bitmap handling for liquid textures
 - Proper cleanup of animation resources

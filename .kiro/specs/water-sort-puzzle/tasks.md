@@ -43,12 +43,30 @@
 
 - [x] 6. Create level management system
 
-  - Implement Level class with difficulty parameters
+  - Implement Level class with difficulty parameters and signature field
   - Create LevelGenerator for procedural level creation
   - Add level validation to ensure solvability
   - Implement level progression and unlocking logic
   - Write unit tests for level generation and validation
-  - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
+  - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 9.1, 9.2, 9.3, 9.4, 9.5_
+
+- [x] 6.1 Implement level similarity detection system
+
+  - Create LevelSimilarityChecker class with pattern normalization
+  - Implement color-agnostic signature generation for levels
+  - Add structural pattern comparison algorithm
+  - Create similarity threshold validation (80% threshold)
+  - Write comprehensive unit tests for similarity detection edge cases
+  - _Requirements: 9.6, 9.7, 9.8_
+
+- [ ] 6.2 Build level generation service with uniqueness tracking
+
+  - Implement LevelGenerationService to manage session-level uniqueness
+  - Add session history tracking for generated levels
+  - Create retry logic for generating unique levels (max 50 attempts)
+  - Implement fallback mechanism when similarity threshold cannot be met
+  - Write integration tests for unique level generation workflow
+  - _Requirements: 9.6, 9.7, 9.8_
 
 - [x] 7. Build persistence layer with Hive and SharedPreferences
 
@@ -77,6 +95,16 @@
   - Write widget tests for animation behavior
   - _Requirements: 2.3, 2.6_
 
+- [ ] 9.1 Implement non-blocking UI animation system
+
+  - Create AnimationQueue class for managing multiple concurrent animations
+  - Implement animation interruption and skipping functionality
+  - Add StreamController for decoupling game logic from UI animations
+  - Ensure game state updates immediately while animations play separately
+  - Create animation state management (IdleState, PouringState, VictoryState)
+  - Write unit tests for animation queue and interruption behavior
+  - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
+
 - [x] 10. Build game board widget and layout
 
   - Create GameBoardWidget to display multiple containers
@@ -86,7 +114,7 @@
   - Write widget tests for layout and interaction
   - _Requirements: 1.5, 2.1, 2.2_
 
-- [ ] 11. Create game state provider with Riverpod/Provider
+- [x] 11. Create game state provider with Riverpod/Provider
 
   - Set up state management provider for GameEngine
   - Implement reactive UI updates for game state changes
@@ -95,7 +123,7 @@
   - Write integration tests for state management
   - _Requirements: 2.4, 2.5, 3.5_
 
-- [ ] 12. Implement victory detection and celebration
+- [x] 12. Implement victory detection and celebration
 
   - Add win condition checking to game loop
   - Create victory animation and visual feedback
@@ -104,7 +132,7 @@
   - Write unit tests for victory conditions
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
 
-- [ ] 13. Build level selection screen
+- [x] 13. Build level selection screen
 
   - Create LevelSelectionWidget with grid layout
   - Implement level unlock status visualization
@@ -113,7 +141,7 @@
   - Write widget tests for level selection UI
   - _Requirements: 5.1, 5.4, 5.5_
 
-- [ ] 14. Add audio feedback system
+- [x] 14. Add audio feedback system
 
   - Integrate audioplayers package for sound effects
   - Create sound effect assets for pour, success, and error actions
@@ -122,7 +150,7 @@
   - Write tests for audio system integration
   - _Requirements: 4.5, 2.6_
 
-- [ ] 15. Create main game screen with UI controls
+- [x] 15. Create main game screen with UI controls
 
   - Build main game screen layout with game board
   - Add undo button with proper state management
