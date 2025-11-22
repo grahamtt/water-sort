@@ -5,7 +5,7 @@ import 'package:json_annotation/json_annotation.dart';
 @JsonEnum()
 enum LiquidColor {
   @JsonValue('red')
-  red(0xFFE53E3E, 'Red'),
+  red(0xFFDC143C, 'Red'),
   
   @JsonValue('blue')
   blue(0xFF3182CE, 'Blue'),

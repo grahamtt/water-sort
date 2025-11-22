@@ -320,14 +320,14 @@ class ContainerPainter extends CustomPainter {
     for (final layer in container.liquidLayers) {
       final layerHeight = heightPerUnit * layer.volume;
       
-      // Create gradient for liquid effect
+      // Create gradient for liquid effect with better color preservation
       final gradient = LinearGradient(
         begin: Alignment.centerLeft,
         end: Alignment.centerRight,
         colors: [
-          layer.color.color.withValues(alpha: 0.8),
-          layer.color.color,
-          layer.color.color.withValues(alpha: 0.9),
+          layer.color.darkColor,  // Slightly darker on left edge for depth
+          layer.color.color,      // True color in center
+          layer.color.lightColor, // Slightly lighter on right edge for highlight
         ],
         stops: const [0.0, 0.5, 1.0],
       );
@@ -384,17 +384,17 @@ class ContainerPainter extends CustomPainter {
         canvas.drawRect(layerRect, paint);
       }
       
-      // Add subtle highlight on top of each layer
-      paint.shader = null;
-      paint.color = Colors.white.withValues(alpha: 0.2);
-      paint.strokeWidth = 1.0;
-      paint.style = PaintingStyle.stroke;
-      
-      canvas.drawLine(
-        Offset(liquidRect.left, currentY - layerHeight),
-        Offset(liquidRect.right, currentY - layerHeight),
-        paint,
-      );
+      // Add subtle highlight on top of each layer (disabled to prevent color distortion)
+      // paint.shader = null;
+      // paint.color = Colors.white.withValues(alpha: 0.2);
+      // paint.strokeWidth = 1.0;
+      // paint.style = PaintingStyle.stroke;
+      // 
+      // canvas.drawLine(
+      //   Offset(liquidRect.left, currentY - layerHeight),
+      //   Offset(liquidRect.right, currentY - layerHeight),
+      //   paint,
+      // );
       
       currentY -= layerHeight;
     }

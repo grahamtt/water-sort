@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'widgets/container_demo.dart';
+import 'screens/game_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize Hive
   await Hive.initFlutter();
-  
+
   runApp(const WaterSortPuzzleApp());
 }
 
@@ -22,7 +22,7 @@ class WaterSortPuzzleApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: const ContainerDemo(),
+      home: const GameScreen(),
     );
   }
 }

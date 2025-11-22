@@ -7,24 +7,28 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:water_sort_puzzle/main.dart';
+import 'package:water_sort_puzzle/widgets/game_board_widget.dart';
+import 'package:water_sort_puzzle/widgets/container_widget.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
+  testWidgets('Water Sort Puzzle app smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
     await tester.pumpWidget(const WaterSortPuzzleApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Verify that the app loads with the game screen
+    expect(find.text('Water Sort Puzzle'), findsOneWidget);
+    expect(find.byType(GameBoardWidget), findsOneWidget);
+    
+    // Verify that containers are displayed
+    expect(find.byType(ContainerWidget), findsWidgets);
+    
+    // Verify that game info is displayed
+    expect(find.text('Moves'), findsOneWidget);
+    expect(find.text('Current Level'), findsOneWidget);
+    expect(find.text('Solved'), findsOneWidget);
+    
+    // Verify that instructions are shown
+    expect(find.textContaining('Tap a container'), findsOneWidget);
   });
 }
