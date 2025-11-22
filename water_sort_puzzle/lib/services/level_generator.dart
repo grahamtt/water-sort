@@ -144,7 +144,8 @@ class WaterSortLevelGenerator implements LevelGenerator {
 
         // Validate the level meets all requirements
         if (_validateGeneratedLevel(level)) {
-          validLevel = level;
+          // Optimize the level by removing unnecessary empty containers
+          validLevel = optimizeLevel(level);
         }
       } catch (e) {
         // Continue to next attempt if generation fails
@@ -211,6 +212,12 @@ class WaterSortLevelGenerator implements LevelGenerator {
     // TODO: Enable actual solvability test when performance is optimized
     // return _testActualSolvability(level);
     return true;
+  }
+
+  /// Optimize a level by removing unnecessary empty containers
+  /// This ensures levels use the minimum number of containers needed
+  Level optimizeLevel(Level level) {
+    return LevelSimilarityChecker.optimizeEmptyContainers(level);
   }
 
   @override

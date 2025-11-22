@@ -504,6 +504,167 @@ void main() {
       });
     });
 
+    group('optimizeEmptyContainers', () {
+      test('should not optimize levels with 3 or fewer containers', () {
+        final level = createLevel(1, [
+          createContainer(0, [(LiquidColor.red, 4)]),
+          createContainer(1, [(LiquidColor.blue, 4)]),
+          createContainer(2, []),
+        ], 2);
+
+        final optimized = LevelSimilarityChecker.optimizeEmptyContainers(level);
+
+        expect(optimized.containerCount, equals(3));
+        expect(optimized.initialContainers.length, equals(3));
+      });
+
+      test('should not optimize levels with only one empty container', () {
+        final level = createLevel(1, [
+          createContainer(0, [(LiquidColor.red, 4)]),
+          createContainer(1, [(LiquidColor.blue, 4)]),
+          createContainer(2, [(LiquidColor.green, 4)]),
+          createContainer(3, []),
+        ], 3);
+
+        final optimized = LevelSimilarityChecker.optimizeEmptyContainers(level);
+
+        expect(optimized.containerCount, equals(4));
+        expect(optimized.initialContainers.length, equals(4));
+      });
+
+      test('should remove unnecessary empty containers', () {
+        final level = createLevel(1, [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, [(LiquidColor.blue, 2), (LiquidColor.red, 2)]),
+          createContainer(2, []),
+          createContainer(3, []),
+          createContainer(4, []),
+        ], 2);
+
+        final optimized = LevelSimilarityChecker.optimizeEmptyContainers(level);
+
+        // Should keep only the minimum containers needed (2 filled + 1 empty = 3 total)
+        expect(optimized.containerCount, lessThan(level.containerCount));
+        expect(optimized.initialContainers.where((c) => c.isEmpty).length, greaterThanOrEqualTo(1));
+        expect(optimized.initialContainers.where((c) => !c.isEmpty).length, equals(2));
+      });
+
+      test('should maintain level solvability after optimization', () {
+        final level = createLevel(1, [
+          createContainer(0, [(LiquidColor.red, 4)]),
+          createContainer(1, [(LiquidColor.blue, 4)]),
+          createContainer(2, []),
+          createContainer(3, []),
+          createContainer(4, []),
+        ], 2);
+
+        final optimized = LevelSimilarityChecker.optimizeEmptyContainers(level);
+
+        // Should still be theoretically solvable
+        expect(optimized.isStructurallyValid, isTrue);
+        expect(optimized.initialContainers.where((c) => c.isEmpty).length, greaterThanOrEqualTo(1));
+      });
+
+      test('should reassign container IDs correctly after optimization', () {
+        final level = createLevel(1, [
+          createContainer(0, [(LiquidColor.red, 4)]),
+          createContainer(1, []),
+          createContainer(2, [(LiquidColor.blue, 4)]),
+          createContainer(3, []),
+          createContainer(4, []),
+        ], 2);
+
+        final optimized = LevelSimilarityChecker.optimizeEmptyContainers(level);
+
+        // Container IDs should be sequential starting from 0
+        for (int i = 0; i < optimized.initialContainers.length; i++) {
+          expect(optimized.initialContainers[i].id, equals(i));
+        }
+      });
+
+      test('should preserve all liquid content during optimization', () {
+        final level = createLevel(1, [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, [(LiquidColor.blue, 2), (LiquidColor.red, 2)]),
+          createContainer(2, []),
+          createContainer(3, []),
+          createContainer(4, []),
+        ], 2);
+
+        final optimized = LevelSimilarityChecker.optimizeEmptyContainers(level);
+
+        // Count total liquid volume before and after
+        int originalVolume = 0;
+        for (final container in level.initialContainers) {
+          for (final layer in container.liquidLayers) {
+            originalVolume += layer.volume;
+          }
+        }
+
+        int optimizedVolume = 0;
+        for (final container in optimized.initialContainers) {
+          for (final layer in container.liquidLayers) {
+            optimizedVolume += layer.volume;
+          }
+        }
+
+        expect(optimizedVolume, equals(originalVolume));
+      });
+    });
+
+    group('_isLevelTheoreticallySolvable', () {
+      test('should return true for valid solvable levels', () {
+        final level = createLevel(1, [
+          createContainer(0, [(LiquidColor.red, 2), (LiquidColor.blue, 2)]),
+          createContainer(1, [(LiquidColor.blue, 2), (LiquidColor.red, 2)]),
+          createContainer(2, []),
+        ], 2);
+
+        expect(LevelSimilarityChecker._isLevelTheoreticallySolvable(level), isTrue);
+      });
+
+      test('should return false for levels with no empty slots', () {
+        final level = createLevel(1, [
+          createContainer(0, [(LiquidColor.red, 4)]),
+          createContainer(1, [(LiquidColor.blue, 4)]),
+        ], 2);
+
+        expect(LevelSimilarityChecker._isLevelTheoreticallySolvable(level), isFalse);
+      });
+
+      test('should return false for levels with incorrect color volumes', () {
+        final level = createLevel(1, [
+          createContainer(0, [(LiquidColor.red, 3)]), // Wrong volume
+          createContainer(1, [(LiquidColor.blue, 4)]),
+          createContainer(2, []),
+        ], 2);
+
+        expect(LevelSimilarityChecker._isLevelTheoreticallySolvable(level), isFalse);
+      });
+
+      test('should return false for levels with insufficient containers', () {
+        final level = createLevel(1, [
+          createContainer(0, [(LiquidColor.red, 4)]),
+          createContainer(1, [(LiquidColor.blue, 4)]),
+        ], 2); // 2 colors but only 2 containers (no room for moves)
+
+        expect(LevelSimilarityChecker._isLevelTheoreticallySolvable(level), isFalse);
+      });
+
+      test('should return false for levels with excessive color fragmentation', () {
+        final level = createLevel(1, [
+          createContainer(0, [(LiquidColor.red, 1)]),
+          createContainer(1, [(LiquidColor.red, 1)]),
+          createContainer(2, [(LiquidColor.red, 1)]),
+          createContainer(3, [(LiquidColor.red, 1)]),
+          createContainer(4, [(LiquidColor.blue, 4)]),
+          createContainer(5, []),
+        ], 2); // Red is spread across too many containers
+
+        expect(LevelSimilarityChecker._isLevelTheoreticallySolvable(level), isFalse);
+      });
+    });
+
     group('edge cases', () {
       test('should handle single container levels', () {
         final level1 = createLevel(1, [

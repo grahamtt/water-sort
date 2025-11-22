@@ -79,6 +79,26 @@
   - Write comprehensive unit tests for completed container detection edge cases
   - _Requirements: 9.9, 9.10_
 
+- [ ] 6.4 Implement empty container optimization for level generation
+
+  - Add optimizeEmptyContainers method to LevelValidator class
+  - Implement empty container removal logic with solvability testing
+  - Create short-circuit optimization when first empty container is required
+  - Integrate empty container optimization into level generation workflow
+  - Update level signature generation after container optimization
+  - Write unit tests for empty container optimization with various scenarios
+  - _Requirements: 9.11, 9.12_
+
+- [ ] 6.5 Implement adjacent color layer merging for level generation
+
+  - Add mergeAdjacentLayers method to LevelValidator class
+  - Implement logic to detect and merge consecutive liquid layers of the same color
+  - Create layer merging algorithm that combines volumes of adjacent same-color layers
+  - Integrate adjacent layer merging into level generation workflow
+  - Update level signature generation after layer merging optimization
+  - Write comprehensive unit tests for layer merging with various container configurations
+  - _Requirements: 9.13, 9.14_
+
 - [x] 7. Build persistence layer with Hive and SharedPreferences
 
   - Set up Hive database for complex game state storage

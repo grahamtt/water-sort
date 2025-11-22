@@ -214,4 +214,127 @@ class LevelSimilarityChecker {
       'analysis_summary': summary,
     };
   }
+
+  /// Optimize a level by removing unnecessary empty containers
+  /// Returns a new level with the minimum number of containers needed to solve the puzzle
+  static Level optimizeEmptyContainers(Level level) {
+    // Don't optimize if the level has very few containers
+    if (level.containerCount <= 3) {
+      return level;
+    }
+
+    // Count empty containers
+    final emptyContainers = level.initialContainers.where((c) => c.isEmpty).length;
+    
+    // If there's only one empty container, we can't remove it (needed for solving)
+    if (emptyContainers <= 1) {
+      return level;
+    }
+
+    // Try removing empty containers one by one and check if level is still solvable
+    Level optimizedLevel = level;
+    
+    for (int containersToRemove = 1; containersToRemove < emptyContainers; containersToRemove++) {
+      final candidateContainers = <Container>[];
+      int emptyContainersAdded = 0;
+      
+      // Add all non-empty containers first
+      for (final container in level.initialContainers) {
+        if (!container.isEmpty) {
+          candidateContainers.add(container.copyWith(id: candidateContainers.length));
+        }
+      }
+      
+      // Add remaining empty containers (keeping at least one)
+      final emptyContainersToKeep = emptyContainers - containersToRemove;
+      for (final container in level.initialContainers) {
+        if (container.isEmpty && emptyContainersAdded < emptyContainersToKeep) {
+          candidateContainers.add(container.copyWith(id: candidateContainers.length));
+          emptyContainersAdded++;
+        }
+      }
+      
+      // Create candidate level
+      final candidateLevel = level.copyWith(
+        containerCount: candidateContainers.length,
+        initialContainers: candidateContainers,
+      );
+      
+      // Check if the candidate level is still theoretically solvable
+      if (_isLevelTheoreticallySolvable(candidateLevel)) {
+        optimizedLevel = candidateLevel;
+      } else {
+        // If removing this many containers makes it unsolvable, stop trying
+        break;
+      }
+    }
+    
+    return optimizedLevel;
+  }
+
+  /// Check if a level is theoretically solvable using heuristic analysis
+  /// This is a fast check that doesn't require actual solving
+  static bool _isLevelTheoreticallySolvable(Level level) {
+    // Basic structural checks
+    if (!level.isStructurallyValid) {
+      return false;
+    }
+    
+    // Must have at least one empty slot for moves
+    final totalEmptySlots = level.initialContainers.fold(
+      0,
+      (sum, container) => sum + container.remainingCapacity,
+    );
+    if (totalEmptySlots == 0) {
+      return false;
+    }
+    
+    // Count colors and their volumes
+    final colorVolumes = <LiquidColor, int>{};
+    for (final container in level.initialContainers) {
+      for (final layer in container.liquidLayers) {
+        colorVolumes[layer.color] = (colorVolumes[layer.color] ?? 0) + layer.volume;
+      }
+    }
+    
+    // Each color should have exactly one container's worth of liquid
+    const standardCapacity = 4; // Assuming standard container capacity
+    for (final volume in colorVolumes.values) {
+      if (volume != standardCapacity) {
+        return false;
+      }
+    }
+    
+    // Check if we have enough containers to hold all colors when sorted
+    final filledContainersNeeded = colorVolumes.length;
+    final totalContainers = level.containerCount;
+    
+    // We need at least one empty slot for moves, so we need more containers than colors
+    if (totalContainers <= filledContainersNeeded) {
+      return false;
+    }
+    
+    // Heuristic: Check if colors are not too fragmented
+    // If a color is split across too many containers, it might be unsolvable
+    final colorFragmentation = <LiquidColor, int>{};
+    for (final container in level.initialContainers) {
+      final colorsInContainer = <LiquidColor>{};
+      for (final layer in container.liquidLayers) {
+        colorsInContainer.add(layer.color);
+      }
+      for (final color in colorsInContainer) {
+        colorFragmentation[color] = (colorFragmentation[color] ?? 0) + 1;
+      }
+    }
+    
+    // If any color is spread across more than half the containers, it's likely unsolvable
+    final maxAllowedFragmentation = (level.containerCount / 2).ceil();
+    for (final fragmentation in colorFragmentation.values) {
+      if (fragmentation > maxAllowedFragmentation) {
+        return false;
+      }
+    }
+    
+    return true;
+  }
 }

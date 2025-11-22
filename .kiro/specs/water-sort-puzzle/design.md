@@ -235,7 +235,7 @@ class LevelValidator {
     // A level is solved if all non-empty containers contain only one color
     for (final container in level.initialState) {
       if (container.liquidLayers.isEmpty) continue;
-      
+
       final firstColor = container.liquidLayers.first.color;
       for (final layer in container.liquidLayers) {
         if (layer.color != firstColor) {
@@ -259,12 +259,12 @@ class LevelValidator {
   /// Determines if a container is completed (single color and full capacity)
   static bool _isContainerCompleted(Container container) {
     if (container.liquidLayers.isEmpty) return false;
-    
+
     // Check if container is full
     final totalVolume = container.liquidLayers
         .fold<int>(0, (sum, layer) => sum + layer.volume);
     if (totalVolume != container.capacity) return false;
-    
+
     // Check if all layers are the same color
     final firstColor = container.liquidLayers.first.color;
     return container.liquidLayers.every((layer) => layer.color == firstColor);
@@ -275,6 +275,112 @@ class LevelValidator {
     // Implementation would calculate minimum empty containers/space needed
     // This is a complex algorithm that depends on the specific level layout
     return true; // Placeholder - actual implementation would be more complex
+  }
+
+  /// Removes unnecessary empty containers while maintaining solvability
+  static Level optimizeEmptyContainers(Level level) {
+    final containers = List<Container>.from(level.initialState);
+
+    // Try removing each empty container and check if level remains solvable
+    // Short-circuit: if one empty container is required, all remaining will be too
+    for (int i = containers.length - 1; i >= 0; i--) {
+      if (containers[i].liquidLayers.isEmpty) {
+        // Create test level without this empty container
+        final testContainers = List<Container>.from(containers);
+        testContainers.removeAt(i);
+
+        final testLevel = Level(
+          id: level.id,
+          difficulty: level.difficulty,
+          initialState: testContainers,
+          minimumMoves: level.minimumMoves,
+          maxMoves: level.maxMoves,
+          signature: level.signature,
+        );
+
+        // If still solvable without this empty container, remove it
+        if (_isSolvable(testLevel)) {
+          containers.removeAt(i);
+        } else {
+          // If this empty container is required, all remaining empty containers will be too
+          // Short-circuit the loop for performance
+          break;
+        }
+      }
+    }
+
+    return Level(
+      id: level.id,
+      difficulty: level.difficulty,
+      initialState: containers,
+      minimumMoves: level.minimumMoves,
+      maxMoves: level.maxMoves,
+      signature: LevelSimilarityChecker.generateNormalizedSignature(
+        Level(
+          id: level.id,
+          difficulty: level.difficulty,
+          initialState: containers,
+          minimumMoves: level.minimumMoves,
+          maxMoves: level.maxMoves,
+          signature: '',
+        ),
+      ),
+    );
+  }
+
+  /// Merges adjacent liquid layers of the same color into single layers
+  static Level mergeAdjacentLayers(Level level) {
+    final optimizedContainers = level.initialState.map((container) {
+      if (container.liquidLayers.isEmpty) return container;
+
+      final mergedLayers = <LiquidLayer>[];
+      LiquidLayer? currentLayer;
+
+      for (final layer in container.liquidLayers) {
+        if (currentLayer == null) {
+          currentLayer = layer;
+        } else if (currentLayer.color == layer.color) {
+          // Merge with previous layer of same color
+          currentLayer = LiquidLayer(
+            color: currentLayer.color,
+            volume: currentLayer.volume + layer.volume,
+          );
+        } else {
+          // Different color, add current layer and start new one
+          mergedLayers.add(currentLayer);
+          currentLayer = layer;
+        }
+      }
+
+      // Add the final layer
+      if (currentLayer != null) {
+        mergedLayers.add(currentLayer);
+      }
+
+      return Container(
+        id: container.id,
+        capacity: container.capacity,
+        liquidLayers: mergedLayers,
+      );
+    }).toList();
+
+    return Level(
+      id: level.id,
+      difficulty: level.difficulty,
+      initialState: optimizedContainers,
+      minimumMoves: level.minimumMoves,
+      maxMoves: level.maxMoves,
+      signature: LevelSimilarityChecker.generateNormalizedSignature(
+        Level(
+          id: level.id,
+          difficulty: level.difficulty,
+          initialState: optimizedContainers,
+          minimumMoves: level.minimumMoves,
+          maxMoves: level.maxMoves,
+          signature: '',
+        ),
+      ),
+    );
   }
 
   /// Checks if the level is solvable using automated solving algorithms
@@ -319,7 +425,7 @@ class LevelSimilarityChecker {
 
     // Calculate similarity score based on:
     // 1. Container count and arrangement
-    // 2. Layer distribution patterns  
+    // 2. Layer distribution patterns
     // 3. Color mixing patterns (independent of actual colors)
     // 4. Container order independence (patterns can be reordered)
     return _calculatePatternSimilarity(pattern1, pattern2);
@@ -332,7 +438,7 @@ class LevelSimilarityChecker {
     // Patterns are sorted to make container order irrelevant
     final containers = level.initialState;
     final normalizedContainers = _normalizeColors(containers);
-    
+
     // Sort patterns to make container order irrelevant for comparison
     final sortedPatterns = List<String>.from(normalizedContainers)..sort();
 
@@ -422,18 +528,18 @@ class LevelGenerationService {
 class MoveValidator {
   static List<ValidMove> getAllValidMoves(List<Container> containers) {
     final validMoves = <ValidMove>[];
-    
+
     for (int fromIndex = 0; fromIndex < containers.length; fromIndex++) {
       final fromContainer = containers[fromIndex];
       final topLayer = fromContainer.getTopLayer();
-      
+
       if (topLayer == null) continue; // Empty container, nothing to pour
-      
+
       for (int toIndex = 0; toIndex < containers.length; toIndex++) {
         if (fromIndex == toIndex) continue; // Can't pour to same container
-        
+
         final toContainer = containers[toIndex];
-        
+
         if (_canPourTo(fromContainer, toContainer, topLayer)) {
           final volume = _calculatePourVolume(fromContainer, toContainer, topLayer);
           validMoves.add(ValidMove(
@@ -445,24 +551,24 @@ class MoveValidator {
         }
       }
     }
-    
+
     return validMoves;
   }
-  
+
   static bool _canPourTo(Container from, Container to, LiquidLayer topLayer) {
     // Check if target container has space
     if (to.isFull) return false;
-    
+
     // Check if colors match or target is empty
     final toTopLayer = to.getTopLayer();
     return toTopLayer == null || toTopLayer.color == topLayer.color;
   }
-  
+
   static int _calculatePourVolume(Container from, Container to, LiquidLayer topLayer) {
     // Calculate how much of the top continuous color can be poured
     int volume = 0;
     final targetColor = topLayer.color;
-    
+
     // Count continuous layers of same color from top
     for (int i = from.liquidLayers.length - 1; i >= 0; i--) {
       if (from.liquidLayers[i].color == targetColor) {
@@ -471,7 +577,7 @@ class MoveValidator {
         break;
       }
     }
-    
+
     // Limit by target container capacity
     final availableSpace = to.capacity - to.currentVolume;
     return math.min(volume, availableSpace);
@@ -482,12 +588,12 @@ class LossDetector {
   static bool hasLost(GameState gameState) {
     // If already won, not lost
     if (gameState.isCompleted) return false;
-    
+
     // Check if any valid moves exist
     final validMoves = MoveValidator.getAllValidMoves(gameState.containers);
     return validMoves.isEmpty;
   }
-  
+
   static String getLossMessage(GameState gameState) {
     return "No more valid moves available! The puzzle cannot be solved from this state.";
   }
@@ -557,15 +663,15 @@ class _GameOverOverlayState extends State<GameOverOverlay>
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
-    
+
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeIn),
     );
-    
+
     _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.elasticOut),
     );
-    
+
     _controller.forward();
   }
 

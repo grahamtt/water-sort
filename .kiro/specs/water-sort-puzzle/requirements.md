@@ -119,6 +119,10 @@ The Water Sort Puzzle app is a cross-platform mobile game where players sort col
 8. IF a generated level is too similar to a previous level THEN the system SHALL regenerate until a sufficiently different level is created
 9. WHEN the system generates a level THEN the system SHALL ensure no containers are already completed (containing only one color and being full)
 10. IF a generated level contains any completed containers THEN the system SHALL regenerate until no completed containers exist in the initial state
+11. WHEN the system generates a level THEN the system SHALL remove any empty container if the level remains solvable without it
+12. IF removing an empty container would make the level unsolvable THEN the system SHALL keep that empty container in the level
+13. WHEN the system generates a level THEN the system SHALL merge any adjacent liquid layers of the same color into a single layer
+14. IF two or more consecutive layers in a container have the same color THEN the system SHALL combine them into one layer with the total volume
 
 ### Requirement 10
 
