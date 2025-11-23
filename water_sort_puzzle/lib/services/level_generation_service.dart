@@ -5,6 +5,7 @@ import '../models/liquid_layer.dart';
 import '../models/liquid_color.dart';
 import 'level_generator.dart';
 import 'level_similarity_checker.dart';
+import 'level_parameters.dart';
 
 /// Service for managing level generation with session-level uniqueness tracking
 /// 
@@ -36,6 +37,7 @@ class LevelGenerationService {
   /// - [difficulty]: Difficulty rating (1-10)
   /// - [containerCount]: Number of containers in the level
   /// - [colorCount]: Number of different colors to use
+  /// - [containerCapacity]: Capacity of each container
   /// 
   /// Returns a [Level] that is guaranteed to be different from session levels
   /// or falls back to a regular generated level if uniqueness cannot be achieved.
@@ -44,10 +46,10 @@ class LevelGenerationService {
     int difficulty,
     int containerCount,
     int colorCount,
+    int containerCapacity,
   ) async {
     Level? uniqueLevel;
     int attempts = 0;
-    final containerCapacity = _calculateContainerCapacity(levelId);
 
     // Try to generate a unique level within the attempt limit
     while (uniqueLevel == null && attempts < maxUniqueGenerationAttempts) {
@@ -107,15 +109,17 @@ class LevelGenerationService {
       final levelId = startLevelId + i;
       
       // Progressive difficulty scaling
-      final difficulty = _calculateProgressiveDifficulty(i, startDifficulty);
+      final difficulty = LevelParameters.calculateProgressiveDifficulty(i, startDifficulty);
       final containerCount = _calculateContainerCount(difficulty, startContainerCount);
       final colorCount = _calculateColorCount(difficulty, containerCount, startColorCount);
+      final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
 
       final level = await generateNextLevel(
         levelId,
         difficulty,
         containerCount,
         colorCount,
+        containerCapacity,
       );
       
       levels.add(level);
@@ -148,7 +152,7 @@ class LevelGenerationService {
       
       // Try one more time with reduced history
       try {
-        final containerCapacity = _calculateContainerCapacity(levelId);
+        final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
         final candidate = _generator.generateLevel(
           levelId,
           difficulty,
@@ -182,7 +186,7 @@ class LevelGenerationService {
     
     // Final fallback: generate a regular level without uniqueness constraints
     try {
-      final containerCapacity = _calculateContainerCapacity(levelId);
+      final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
       final fallbackLevel = _generator.generateLevel(
         levelId,
         difficulty,
@@ -216,7 +220,7 @@ class LevelGenerationService {
 
     for (final (newContainerCount, newColorCount) in variations) {
       try {
-        final containerCapacity = _calculateContainerCapacity(levelId);
+        final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
         final candidate = _generator.generateLevel(
           levelId,
           difficulty,
@@ -303,12 +307,6 @@ class LevelGenerationService {
     };
   }
 
-  /// Calculate progressive difficulty for level series
-  int _calculateProgressiveDifficulty(int levelIndex, int startDifficulty) {
-    // Gradually increase difficulty every few levels
-    final difficultyIncrease = levelIndex ~/ 5; // Increase every 5 levels
-    return min(10, startDifficulty + difficultyIncrease);
-  }
 
   /// Calculate container count based on difficulty
   int _calculateContainerCount(int difficulty, int baseContainerCount) {
@@ -332,11 +330,6 @@ class LevelGenerationService {
     return min(max(6, baseColorCount), maxColors);
   }
 
-  /// Calculate container capacity based on level ID
-  int _calculateContainerCapacity(int levelId) {
-    // Base capacity is 4, increase by 1 every 10 levels
-    return 4 + ((levelId - 1) ~/ 10);
-  }
 
   /// Validate that the service is working correctly
   bool validateService() {
@@ -364,7 +357,7 @@ class LevelGenerationService {
   Level _createMinimalLevel(int levelId, int difficulty, int containerCount, int colorCount) {
     // Import required models
     final containers = <Container>[];
-    final containerCapacity = _calculateContainerCapacity(levelId);
+    final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
     
     // Create containers - first few with simple liquid patterns, rest empty
     for (int i = 0; i < containerCount; i++) {

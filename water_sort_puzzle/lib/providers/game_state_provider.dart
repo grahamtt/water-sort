@@ -11,6 +11,7 @@ import '../animations/pour_animation.dart';
 import '../services/game_engine.dart';
 import '../services/level_generator.dart';
 import '../services/audio_manager.dart';
+import '../services/level_parameters.dart';
 
 /// Enum representing different loading states for async operations
 enum GameLoadingState {
@@ -84,10 +85,10 @@ class GameStateProvider extends ChangeNotifier {
       
       // Generate level containers
       // Calculate difficulty and parameters based on level ID
-      final difficulty = _calculateDifficultyForLevel(levelId);
-      final containerCount = _calculateContainerCountForLevel(levelId);
-      final colorCount = _calculateColorCountForLevel(levelId);
-      final containerCapacity = _calculateContainerCapacityForLevel(levelId);
+      final difficulty = LevelParameters.calculateDifficultyForLevel(levelId);
+      final containerCount = LevelParameters.calculateContainerCountForLevel(levelId);
+      final colorCount = LevelParameters.calculateColorCountForLevel(levelId);
+      final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
       
       final level = _levelGenerator.generateLevel(levelId, difficulty, containerCount, colorCount, containerCapacity);
       
@@ -511,38 +512,6 @@ class GameStateProvider extends ChangeNotifier {
     Future.delayed(const Duration(seconds: 2), _clearFeedback);
   }
   
-  // Level parameter calculation methods
-  
-  int _calculateDifficultyForLevel(int levelId) {
-    // Progressive difficulty: start at 1, increase every 5 levels
-    return ((levelId - 1) ~/ 5) + 1;
-  }
-  
-  int _calculateContainerCountForLevel(int levelId) {
-    final difficulty = _calculateDifficultyForLevel(levelId);
-    if (difficulty <= 2) return 4;
-    if (difficulty <= 4) return 5;
-    if (difficulty <= 6) return 6;
-    if (difficulty <= 8) return 7;
-    return 8;
-  }
-  
-  int _calculateColorCountForLevel(int levelId) {
-    final difficulty = _calculateDifficultyForLevel(levelId);
-    final containerCount = _calculateContainerCountForLevel(levelId);
-    final maxColors = containerCount - 1; // Leave at least 1 empty container
-    
-    if (difficulty <= 2) return 2.clamp(2, maxColors);
-    if (difficulty <= 4) return 3.clamp(2, maxColors);
-    if (difficulty <= 6) return 4.clamp(2, maxColors);
-    if (difficulty <= 8) return 5.clamp(2, maxColors);
-    return 6.clamp(2, maxColors);
-  }
-  
-  int _calculateContainerCapacityForLevel(int levelId) {
-    // Base capacity is 4, increase by 1 every 10 levels
-    return 4 + ((levelId - 1) ~/ 10);
-  }
   
   @override
   void dispose() {

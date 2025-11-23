@@ -35,17 +35,33 @@ class LevelValidator {
   /// Checks if the level is already in a solved state
   /// 
   /// A level is solved if all non-empty containers contain only one color
+  /// AND all sorted containers are completely full (no work left to do)
   static bool _isAlreadySolved(Level level) {
+    bool hasAnyLiquid = false;
+    
     for (final container in level.initialContainers) {
       if (container.isEmpty) continue;
+      
+      hasAnyLiquid = true;
 
-      // If container has mixed colors, level is not solved
+      // If container has mixed colors, level is definitely not solved
       if (!container.isSorted) {
+        return false;
+      }
+      
+      // If container is sorted but not full, there's still work to do
+      // (need to fill it up by pouring from other containers)
+      if (!container.isFull) {
         return false;
       }
     }
 
-    // All containers are either empty or contain only one color
+    // If we have no liquid at all, that's not a valid puzzle
+    if (!hasAnyLiquid) {
+      return true;
+    }
+
+    // All containers are either empty or sorted AND full - this is solved
     return true;
   }
 

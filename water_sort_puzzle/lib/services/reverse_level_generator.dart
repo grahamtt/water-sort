@@ -5,6 +5,7 @@ import '../models/liquid_layer.dart';
 import '../models/liquid_color.dart';
 import 'level_generator.dart';
 import 'level_validator.dart';
+import 'level_parameters.dart';
 
 /// Generates levels using a reverse-solving approach.
 /// Starts with a solved puzzle and systematically scrambles it using
@@ -70,11 +71,14 @@ class ReverseLevelGenerator implements LevelGenerator {
 
       // Validate the level meets all requirements
       if (LevelValidator.validateGeneratedLevel(level)) {
-        // Optimize by removing unnecessary empty containers
-        // This tests if the level can be solved with fewer empty containers
-        final optimizedLevel = LevelValidator.optimizeEmptyContainers(level);
-
-        return optimizedLevel;
+        // Skip optimization for small capacities to avoid BFS solver issues
+        // Optimize by removing unnecessary empty containers only for larger capacities
+        if (containerCapacity >= 4) {
+          final optimizedLevel = LevelValidator.optimizeEmptyContainers(level);
+          return optimizedLevel;
+        }
+        
+        return level;
       }
     }
 
@@ -128,10 +132,10 @@ class ReverseLevelGenerator implements LevelGenerator {
 
     for (int i = 0; i < count; i++) {
       final levelId = startId + i;
-      final difficulty = _calculateProgressiveDifficulty(i, startDifficulty);
-      final containerCount = _calculateContainerCount(difficulty);
-      final colorCount = _calculateColorCount(difficulty, containerCount);
-      final containerCapacity = 4 + ((levelId - 1) ~/ 10);
+      final difficulty = LevelParameters.calculateProgressiveDifficulty(i, startDifficulty);
+      final containerCount = LevelParameters.calculateContainerCount(difficulty);
+      final colorCount = LevelParameters.calculateColorCount(difficulty, containerCount);
+      final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
 
       final level = generateLevel(
         levelId,
@@ -206,7 +210,8 @@ class ReverseLevelGenerator implements LevelGenerator {
   }
 
   /// Scramble a solved puzzle using inverse operations
-  /// The number and type of scrambling moves depend on difficulty
+  /// Continues scrambling until the puzzle is sufficiently mixed,
+  /// as determined by the percentage of contiguous colors falling below a threshold
   List<Container> _scramblePuzzle(
     List<Container> solvedContainers,
     int difficulty,
@@ -223,21 +228,38 @@ class ReverseLevelGenerator implements LevelGenerator {
             ))
         .toList();
 
-    // Calculate number of scrambling moves based on difficulty
-    final moveCount = _calculateScrambleMoves(difficulty, colors.length);
+    // Calculate the target scrambling threshold based on difficulty
+    // Higher difficulty = lower threshold = more scrambled
+    final targetThreshold = _calculateScrambleThreshold(difficulty);
 
     // Track state to avoid getting stuck
     final stateHistory = <String>{};
-    int successfulMoves = 0;
     int attempts = 0;
-    final maxAttempts = moveCount * 10; // Allow some failed attempts
+    final maxAttempts = 1000; // Safety limit to prevent infinite loops
+    int consecutiveFailures = 0;
+    final maxConsecutiveFailures = 10; // Exit if we can't make progress
 
-    while (successfulMoves < moveCount && attempts < maxAttempts) {
+    // Continue scrambling until sufficiently mixed
+    while (attempts < maxAttempts) {
       attempts++;
 
+      // Check if we've reached the target scrambling level
+      final contiguousPercentage = _calculateContiguousPercentage(containers);
+      if (contiguousPercentage <= targetThreshold) {
+        break;
+      }
+
       // Try to perform a scrambling move
-      if (_performRandomScrambleMove(containers, colors, stateHistory)) {
-        successfulMoves++;
+      final moveSuccessful = _performRandomScrambleMove(containers, colors, stateHistory);
+      
+      if (!moveSuccessful) {
+        consecutiveFailures++;
+        if (consecutiveFailures >= maxConsecutiveFailures) {
+          // Can't make more progress, accept current state
+          break;
+        }
+      } else {
+        consecutiveFailures = 0;
       }
     }
 
@@ -252,10 +274,36 @@ class ReverseLevelGenerator implements LevelGenerator {
       // Distribute its contents to other containers
       while (toEmpty.liquidLayers.isNotEmpty) {
         final layer = toEmpty.liquidLayers.removeLast();
+        bool placed = false;
+        
         // Find a container with space
         for (final target in containers) {
           if (target != toEmpty && target.remainingCapacity >= layer.volume) {
             target.liquidLayers.add(layer);
+            placed = true;
+            break;
+          }
+        }
+        
+        // If we couldn't place the layer anywhere, we need to split it or give up
+        if (!placed) {
+          // Try to split the layer and place parts in multiple containers
+          int remainingVolume = layer.volume;
+          for (final target in containers) {
+            if (target != toEmpty && target.remainingCapacity > 0) {
+              final volumeToPlace = min(remainingVolume, target.remainingCapacity);
+              target.liquidLayers.add(LiquidLayer(
+                color: layer.color,
+                volume: volumeToPlace,
+              ));
+              remainingVolume -= volumeToPlace;
+              if (remainingVolume == 0) break;
+            }
+          }
+          
+          // If we still have remaining volume, we can't empty this container
+          // Just break to avoid infinite loop
+          if (remainingVolume > 0) {
             break;
           }
         }
@@ -274,15 +322,64 @@ class ReverseLevelGenerator implements LevelGenerator {
     return containers;
   }
 
-  /// Calculate the number of scrambling moves based on difficulty
-  int _calculateScrambleMoves(int difficulty, int colorCount) {
-    // Base moves: proportional to number of colors
-    final baseMoves = colorCount * 2;
+  /// Calculate the target scrambling threshold based on difficulty
+  /// Returns the maximum percentage of contiguous colors allowed
+  /// Lower values = more scrambled = harder
+  double _calculateScrambleThreshold(int difficulty) {
+    // Difficulty 1-2: 40% contiguous (easier, less scrambled)
+    // Difficulty 3-4: 30% contiguous
+    // Difficulty 5-6: 20% contiguous
+    // Difficulty 7-8: 15% contiguous
+    // Difficulty 9-10: 10% contiguous (harder, more scrambled)
     
-    // Additional moves based on difficulty
-    final difficultyMultiplier = 1 + (difficulty / 10);
-    
-    return (baseMoves * difficultyMultiplier).round();
+    if (difficulty <= 2) return 0.40;
+    if (difficulty <= 4) return 0.30;
+    if (difficulty <= 6) return 0.20;
+    if (difficulty <= 8) return 0.15;
+    return 0.10;
+  }
+
+  /// Calculate the percentage of liquid that is in contiguous (sorted) positions
+  /// Returns a value between 0.0 (completely scrambled) and 1.0 (completely sorted)
+  double _calculateContiguousPercentage(List<Container> containers) {
+    int totalVolume = 0;
+    int contiguousVolume = 0;
+
+    for (final container in containers) {
+      if (container.isEmpty) continue;
+
+      // Count total volume
+      final containerVolume = container.currentVolume;
+      totalVolume += containerVolume;
+
+      // Count contiguous sequences within this container
+      // Group consecutive layers of the same color together
+      LiquidColor? currentColor;
+      int currentSequenceVolume = 0;
+
+      for (final layer in container.liquidLayers) {
+        if (layer.color == currentColor) {
+          // Same color continues - add to current sequence
+          currentSequenceVolume += layer.volume;
+        } else {
+          // New color - count the previous sequence if it existed
+          if (currentSequenceVolume > 1) {
+            contiguousVolume += currentSequenceVolume - 1;
+          }
+          // Start new sequence
+          currentColor = layer.color;
+          currentSequenceVolume = layer.volume;
+        }
+      }
+
+      // Don't forget to count the final sequence
+      if (currentSequenceVolume > 1) {
+        contiguousVolume += currentSequenceVolume - 1;
+      }
+    }
+
+    if (totalVolume == 0) return 0.0;
+    return contiguousVolume / totalVolume;
   }
 
   /// Perform a random scrambling move (inverse operation)
@@ -493,31 +590,6 @@ class ReverseLevelGenerator implements LevelGenerator {
     return containerSignatures.join('|');
   }
 
-  /// Calculate progressive difficulty for level series
-  int _calculateProgressiveDifficulty(int levelIndex, int startDifficulty) {
-    final difficultyIncrease = levelIndex ~/ 5;
-    return min(10, startDifficulty + difficultyIncrease);
-  }
-
-  /// Calculate container count based on difficulty
-  int _calculateContainerCount(int difficulty) {
-    if (difficulty <= 2) return 4;
-    if (difficulty <= 4) return 5;
-    if (difficulty <= 6) return 6;
-    if (difficulty <= 8) return 7;
-    return 8;
-  }
-
-  /// Calculate color count based on difficulty and container count
-  int _calculateColorCount(int difficulty, int containerCount) {
-    final maxColors = containerCount - 1;
-
-    if (difficulty <= 2) return min(2, maxColors);
-    if (difficulty <= 4) return min(3, maxColors);
-    if (difficulty <= 6) return min(4, maxColors);
-    if (difficulty <= 8) return min(5, maxColors);
-    return min(6, maxColors);
-  }
 
   /// Generate appropriate tags for a level
   List<String> _generateTags(int levelId, int difficulty) {

@@ -8,6 +8,7 @@ import 'game_engine.dart';
 import 'level_similarity_checker.dart';
 import 'level_validator.dart';
 import 'audio_manager.dart';
+import 'level_parameters.dart';
 
 /// Configuration for level generation
 class LevelGenerationConfig {
@@ -278,10 +279,10 @@ class WaterSortLevelGenerator implements LevelGenerator {
 
     for (int i = 0; i < count; i++) {
       final levelId = startId + i;
-      final difficulty = _calculateProgressiveDifficulty(i, startDifficulty);
-      final containerCount = _calculateContainerCount(difficulty);
-      final colorCount = _calculateColorCount(difficulty, containerCount);
-      final containerCapacity = 4 + ((levelId - 1) ~/ 10);
+      final difficulty = LevelParameters.calculateProgressiveDifficulty(i, startDifficulty);
+      final containerCount = LevelParameters.calculateContainerCount(difficulty);
+      final colorCount = LevelParameters.calculateColorCount(difficulty, containerCount);
+      final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
 
       final level = generateLevel(
         levelId,
@@ -780,35 +781,6 @@ class WaterSortLevelGenerator implements LevelGenerator {
     return true;
   }
 
-  /// Calculate progressive difficulty for level series
-  int _calculateProgressiveDifficulty(int levelIndex, int startDifficulty) {
-    // Gradually increase difficulty
-    final difficultyIncrease = levelIndex ~/ 5; // Increase every 5 levels
-    return min(10, startDifficulty + difficultyIncrease);
-  }
-
-  /// Calculate container count based on difficulty
-  int _calculateContainerCount(int difficulty) {
-    if (difficulty <= 2) return 4;
-    if (difficulty <= 4) return 5;
-    if (difficulty <= 6) return 6;
-    if (difficulty <= 8) return 7;
-    return 8;
-  }
-
-  /// Calculate color count based on difficulty and container count
-  int _calculateColorCount(int difficulty, int containerCount) {
-    // For harder levels, we can use more colors relative to containers
-    // but ensure we have at least one empty slot
-    final maxColors =
-        containerCount - 1; // Always leave room for at least one empty slot
-
-    if (difficulty <= 2) return min(2, maxColors);
-    if (difficulty <= 4) return min(3, maxColors);
-    if (difficulty <= 6) return min(4, maxColors);
-    if (difficulty <= 8) return min(5, maxColors);
-    return min(6, maxColors);
-  }
 
   /// Generate appropriate tags for a level
   List<String> _generateTags(int levelId, int difficulty) {
