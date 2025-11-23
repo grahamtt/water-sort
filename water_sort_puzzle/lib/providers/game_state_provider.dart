@@ -11,6 +11,7 @@ import '../animations/pour_animation.dart';
 import '../services/game_engine.dart';
 import '../services/level_generator.dart';
 import '../services/audio_manager.dart';
+import '../services/loss_detector.dart';
 
 /// Enum representing different loading states for async operations
 enum GameLoadingState {
@@ -27,6 +28,7 @@ enum GameUIState {
   containerSelected,
   pouring,
   victory,
+  loss,
   error,
 }
 
@@ -75,6 +77,7 @@ class GameStateProvider extends ChangeNotifier {
   bool get canUndo => _currentGameState?.canUndo ?? false;
   bool get canRedo => _currentGameState?.canRedo ?? false;
   bool get isVictory => _uiState == GameUIState.victory;
+  bool get isLoss => _uiState == GameUIState.loss;
   
   /// Initialize a new level
   Future<void> initializeLevel(int levelId) async {
@@ -95,6 +98,9 @@ class GameStateProvider extends ChangeNotifier {
       _setUIState(GameUIState.idle);
       _selectedContainerId = null;
       
+      // Check for loss condition immediately after initialization
+      await _checkLossCondition(_currentGameState!);
+      
       _setLoadingState(GameLoadingState.idle);
       notifyListeners();
     } catch (e) {
@@ -112,6 +118,9 @@ class GameStateProvider extends ChangeNotifier {
       _currentGameState = _gameEngine.initializeLevel(level.id, level.initialContainers);
       _setUIState(GameUIState.idle);
       _selectedContainerId = null;
+      
+      // Check for loss condition immediately after initialization
+      await _checkLossCondition(_currentGameState!);
       
       _setLoadingState(GameLoadingState.idle);
       notifyListeners();
@@ -188,7 +197,11 @@ class GameStateProvider extends ChangeNotifier {
         if (_gameEngine.checkWinCondition(newGameState)) {
           await _handleVictory(newGameState);
         } else {
-          _setUIState(GameUIState.idle);
+          // Check for loss condition after each move
+          await _checkLossCondition(newGameState);
+          if (_uiState != GameUIState.loss) {
+            _setUIState(GameUIState.idle);
+          }
         }
         
       } else {
@@ -346,6 +359,14 @@ class GameStateProvider extends ChangeNotifier {
       _clearFeedback();
     }
   }
+
+  /// Dismiss loss state and allow player to restart or select level
+  void dismissLoss() {
+    if (_uiState == GameUIState.loss) {
+      _setUIState(GameUIState.idle);
+      _clearFeedback();
+    }
+  }
   
   /// Progress to the next level
   Future<void> progressToNextLevel() async {
@@ -474,6 +495,36 @@ class GameStateProvider extends ChangeNotifier {
     
     // Mark the level as completed in the game state
     _currentGameState = gameState.copyWith(isCompleted: true);
+    
+    notifyListeners();
+  }
+
+  /// Check for loss condition and handle loss state
+  Future<void> _checkLossCondition(GameState gameState) async {
+    // Don't check for loss during animations or transitions
+    if (isAnimating || _uiState == GameUIState.pouring) {
+      return;
+    }
+    
+    if (_gameEngine.checkLossCondition(gameState)) {
+      await _handleLoss(gameState);
+    }
+  }
+
+  /// Handle loss condition when no valid moves are available
+  Future<void> _handleLoss(GameState gameState) async {
+    _setUIState(GameUIState.loss);
+    
+    // Play error sound and haptic feedback for loss
+    _audioManager.playErrorSound();
+    _audioManager.mediumHaptic();
+    
+    // Get loss message from the loss detector
+    final lossMessage = LossDetector.getLossMessage(gameState);
+    _setFeedbackMessage(lossMessage);
+    
+    // Mark the level as lost in the game state
+    _currentGameState = gameState.copyWith(isLost: true);
     
     notifyListeners();
   }

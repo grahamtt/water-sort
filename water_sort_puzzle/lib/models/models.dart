@@ -5,3 +5,4 @@ export 'move.dart';
 export 'pour_result.dart';
 export 'game_state.dart';
 export 'level.dart';
+export 'test_mode_indicator.dart';

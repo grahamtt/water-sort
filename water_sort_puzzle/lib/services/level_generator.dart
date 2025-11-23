@@ -7,6 +7,7 @@ import '../models/game_state.dart';
 import 'game_engine.dart';
 import 'level_similarity_checker.dart';
 import 'level_validator.dart';
+import 'test_mode_manager.dart';
 
 /// Configuration for level generation
 class LevelGenerationConfig {
@@ -53,8 +54,9 @@ abstract class LevelGenerator {
     int levelId,
     int difficulty,
     int containerCount,
-    int colorCount,
-  );
+    int colorCount, {
+    bool ignoreProgressionLimits = false,
+  });
 
   /// Generate a unique level that is not similar to existing levels
   Level generateUniqueLevel(
@@ -62,8 +64,9 @@ abstract class LevelGenerator {
     int difficulty,
     int containerCount,
     int colorCount,
-    List<Level> existingLevels,
-  );
+    List<Level> existingLevels, {
+    bool ignoreProgressionLimits = false,
+  });
 
   /// Validate that a level is solvable
   bool validateLevel(Level level);
@@ -99,77 +102,112 @@ class WaterSortLevelGenerator implements LevelGenerator {
     int levelId,
     int difficulty,
     int containerCount,
-    int colorCount,
-  ) {
-    // Validate input parameters
-    if (colorCount > LiquidColor.values.length) {
-      throw ArgumentError(
-        'Color count ($colorCount) cannot exceed available colors (${LiquidColor.values.length})',
-      );
-    }
-
-    // Check if we have enough containers for the colors and minimum empty slots
-    final totalLiquidVolume = colorCount * config.containerCapacity;
-    final totalCapacity = containerCount * config.containerCapacity;
-    if (totalCapacity - totalLiquidVolume < config.minEmptySlots) {
-      throw ArgumentError(
-        'Container count ($containerCount) is insufficient for $colorCount colors '
-        'with minimum ${config.minEmptySlots} empty slots. '
-        'Need at least ${(totalLiquidVolume + config.minEmptySlots + config.containerCapacity - 1) ~/ config.containerCapacity} containers.',
-      );
-    }
-
-    Level? validLevel;
-    int attempts = 0;
-
-    // Try to generate a valid level within the attempt limit
-    while (validLevel == null && attempts < config.maxGenerationAttempts) {
-      attempts++;
-
-      try {
-        // Select colors for this level
-        final selectedColors = _selectColors(colorCount);
-
-        // Generate containers with proper empty slot distribution
-        final containers = _generateValidContainers(
-          containerCount,
-          selectedColors,
-          difficulty,
+    int colorCount, {
+    bool ignoreProgressionLimits = false,
+  }) {
+    try {
+      // Validate input parameters
+      if (colorCount > LiquidColor.values.length) {
+        throw ArgumentError(
+          'Color count ($colorCount) cannot exceed available colors (${LiquidColor.values.length})',
         );
+      }
 
-        // Create the level
-        final level = Level(
-          id: levelId,
-          difficulty: difficulty,
-          containerCount: containerCount,
-          colorCount: colorCount,
-          initialContainers: containers,
-          tags: _generateTags(levelId, difficulty),
-        );
-
-        // Validate the level meets all requirements
-        if (_validateGeneratedLevel(level)) {
-          // Apply optimizations after validation
-          // First merge adjacent layers of the same color
-          var optimizedLevel = LevelValidator.mergeAdjacentLayers(level);
-          // Then optimize empty containers
-          validLevel = LevelValidator.optimizeEmptyContainers(optimizedLevel);
+      // In test mode, allow more flexible parameter combinations
+      if (!ignoreProgressionLimits) {
+        // Check if we have enough containers for the colors and minimum empty slots
+        final totalLiquidVolume = colorCount * config.containerCapacity;
+        final totalCapacity = containerCount * config.containerCapacity;
+        if (totalCapacity - totalLiquidVolume < config.minEmptySlots) {
+          throw ArgumentError(
+            'Container count ($containerCount) is insufficient for $colorCount colors '
+            'with minimum ${config.minEmptySlots} empty slots. '
+            'Need at least ${(totalLiquidVolume + config.minEmptySlots + config.containerCapacity - 1) ~/ config.containerCapacity} containers.',
+          );
         }
-      } catch (e) {
-        // Continue to next attempt if generation fails
-        continue;
+      } else {
+        // In test mode, ensure we have at least the minimum viable configuration
+        final minContainers = colorCount + 1; // At least one container per color plus one empty
+        if (containerCount < minContainers) {
+          throw ArgumentError(
+            'Even in test mode, need at least $minContainers containers for $colorCount colors',
+          );
+        }
+      }
+
+      Level? validLevel;
+      int attempts = 0;
+
+      // Try to generate a valid level within the attempt limit
+      while (validLevel == null && attempts < config.maxGenerationAttempts) {
+        attempts++;
+
+        try {
+          // Select colors for this level
+          final selectedColors = _selectColors(colorCount);
+
+          // Generate containers with proper empty slot distribution
+          final containers = _generateValidContainers(
+            containerCount,
+            selectedColors,
+            difficulty,
+          );
+
+          // Create the level
+          final level = Level(
+            id: levelId,
+            difficulty: difficulty,
+            containerCount: containerCount,
+            colorCount: colorCount,
+            initialContainers: containers,
+            tags: _generateTags(levelId, difficulty),
+          );
+
+          // Validate the level meets all requirements
+          if (_validateGeneratedLevel(level)) {
+            // Apply optimizations after validation
+            // First merge adjacent layers of the same color
+            var optimizedLevel = LevelValidator.mergeAdjacentLayers(level);
+            // Then optimize empty containers
+            validLevel = LevelValidator.optimizeEmptyContainers(optimizedLevel);
+          }
+        } catch (e) {
+          // Continue to next attempt if generation fails
+          continue;
+        }
+      }
+
+      if (validLevel == null) {
+        if (ignoreProgressionLimits) {
+          // In test mode, provide more detailed error information
+          throw TestModeException(
+            TestModeErrorType.levelGenerationFailure,
+            'Failed to generate valid level in test mode after ${config.maxGenerationAttempts} attempts. '
+            'Parameters: levelId=$levelId, difficulty=$difficulty, '
+            'containerCount=$containerCount, colorCount=$colorCount',
+          );
+        } else {
+          throw StateError(
+            'Failed to generate valid level after ${config.maxGenerationAttempts} attempts. '
+            'Try adjusting parameters: levelId=$levelId, difficulty=$difficulty, '
+            'containerCount=$containerCount, colorCount=$colorCount',
+          );
+        }
+      }
+
+      return validLevel;
+    } catch (e) {
+      // Handle any unexpected errors during level generation
+      if (ignoreProgressionLimits) {
+        throw TestModeException(
+          TestModeErrorType.levelGenerationFailure,
+          'Unexpected error during test mode level generation: $e',
+          e,
+        );
+      } else {
+        rethrow;
       }
     }
-
-    if (validLevel == null) {
-      throw StateError(
-        'Failed to generate valid level after ${config.maxGenerationAttempts} attempts. '
-        'Try adjusting parameters: levelId=$levelId, difficulty=$difficulty, '
-        'containerCount=$containerCount, colorCount=$colorCount',
-      );
-    }
-
-    return validLevel;
   }
 
   @override
@@ -178,8 +216,9 @@ class WaterSortLevelGenerator implements LevelGenerator {
     int difficulty,
     int containerCount,
     int colorCount,
-    List<Level> existingLevels,
-  ) {
+    List<Level> existingLevels, {
+    bool ignoreProgressionLimits = false,
+  }) {
     Level? uniqueLevel;
     int attempts = 0;
 
@@ -193,6 +232,7 @@ class WaterSortLevelGenerator implements LevelGenerator {
         difficulty,
         containerCount,
         colorCount,
+        ignoreProgressionLimits: ignoreProgressionLimits,
       );
 
       // Check if it's unique compared to existing levels
@@ -209,6 +249,7 @@ class WaterSortLevelGenerator implements LevelGenerator {
         difficulty,
         containerCount,
         colorCount,
+        ignoreProgressionLimits: ignoreProgressionLimits,
       );
     }
 

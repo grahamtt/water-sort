@@ -371,12 +371,12 @@ void main() {
 /// Mock level generator that throws errors for testing
 class _ErrorLevelGenerator implements LevelGenerator {
   @override
-  Level generateLevel(int levelId, int difficulty, int containerCount, int colorCount) {
+  Level generateLevel(int levelId, int difficulty, int containerCount, int colorCount, {bool ignoreProgressionLimits = false}) {
     throw Exception('Test error in level generation');
   }
 
   @override
-  Level generateUniqueLevel(int levelId, int difficulty, int containerCount, int colorCount, List<Level> existingLevels) {
+  Level generateUniqueLevel(int levelId, int difficulty, int containerCount, int colorCount, List<Level> existingLevels, {bool ignoreProgressionLimits = false}) {
     throw Exception('Test error in unique level generation');
   }
 

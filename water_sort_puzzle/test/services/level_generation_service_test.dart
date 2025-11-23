@@ -32,8 +32,9 @@ class MockLevelGenerator implements LevelGenerator {
     int levelId,
     int difficulty,
     int containerCount,
-    int colorCount,
-  ) {
+    int colorCount, {
+    bool ignoreProgressionLimits = false,
+  }) {
     if (_shouldThrowError) {
       throw StateError('Mock generation error');
     }
@@ -57,10 +58,11 @@ class MockLevelGenerator implements LevelGenerator {
     int difficulty,
     int containerCount,
     int colorCount,
-    List<Level> existingLevels,
-  ) {
+    List<Level> existingLevels, {
+    bool ignoreProgressionLimits = false,
+  }) {
     // For testing, just delegate to generateLevel
-    return generateLevel(levelId, difficulty, containerCount, colorCount);
+    return generateLevel(levelId, difficulty, containerCount, colorCount, ignoreProgressionLimits: ignoreProgressionLimits);
   }
 
   @override

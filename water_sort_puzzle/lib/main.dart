@@ -3,18 +3,23 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'screens/game_screen.dart';
 import 'screens/level_selection_screen.dart';
 import 'widgets/game_state_example.dart';
-import 'services/audio_manager.dart';
+import 'services/dependency_injection.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Hive
-  await Hive.initFlutter();
+  try {
+    // Initialize Hive (required by StorageService)
+    await Hive.initFlutter();
 
-  // Initialize Audio Manager
-  await AudioManager().initialize();
+    // Initialize all dependencies in the correct order
+    await DependencyInjection.instance.initialize();
 
-  runApp(const WaterSortPuzzleApp());
+    runApp(const WaterSortPuzzleApp());
+  } catch (e) {
+    // Handle initialization errors gracefully
+    runApp(ErrorApp(error: e.toString()));
+  }
 }
 
 class WaterSortPuzzleApp extends StatelessWidget {
@@ -22,13 +27,74 @@ class WaterSortPuzzleApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return DependencyProvider(
+      child: MaterialApp(
+        title: 'Water Sort Puzzle',
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+          useMaterial3: true,
+        ),
+        home: const MainMenu(),
+      ),
+    );
+  }
+}
+
+/// Error app displayed when initialization fails
+class ErrorApp extends StatelessWidget {
+  final String error;
+
+  const ErrorApp({super.key, required this.error});
+
+  @override
+  Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Water Sort Puzzle',
+      title: 'Water Sort Puzzle - Error',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.red),
         useMaterial3: true,
       ),
-      home: const MainMenu(),
+      home: Scaffold(
+        appBar: AppBar(
+          title: const Text('Initialization Error'),
+          backgroundColor: Colors.red.shade100,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: Colors.red,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Failed to initialize the app',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  error,
+                  style: const TextStyle(fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+                ElevatedButton(
+                  onPressed: () {
+                    // Restart the app
+                    main();
+                  },
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

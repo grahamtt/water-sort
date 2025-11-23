@@ -3,16 +3,21 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/game_state.dart';
 import '../models/level.dart';
-import '../services/game_engine.dart';
-import '../services/level_generator.dart';
+import '../services/dependency_injection.dart';
+import '../services/test_mode_manager.dart';
+import '../services/progress_override.dart';
 import '../providers/game_state_provider.dart';
 import '../widgets/container_widget.dart';
 import '../widgets/victory_animation.dart';
+import '../widgets/test_mode_indicator_widget.dart';
 
 /// Main game screen that uses the GameStateProvider for state management
 class GameScreen extends StatefulWidget {
   /// Optional specific level to play
   final Level? level;
+  
+  /// Level ID to generate if no level is provided
+  final int? levelId;
   
   /// Callback when level is completed
   final void Function(Level level, int moves, int timeInSeconds)? onLevelCompleted;
@@ -20,6 +25,7 @@ class GameScreen extends StatefulWidget {
   const GameScreen({
     super.key,
     this.level,
+    this.levelId,
     this.onLevelCompleted,
   });
 
@@ -28,7 +34,6 @@ class GameScreen extends StatefulWidget {
 }
 
 class _GameScreenState extends State<GameScreen> {
-  late GameStateProvider _gameStateProvider;
   late DateTime _levelStartTime;
   bool _isPaused = false;
   DateTime? _pauseStartTime;
@@ -39,12 +44,6 @@ class _GameScreenState extends State<GameScreen> {
   void initState() {
     super.initState();
     
-    // Initialize the game state provider
-    _gameStateProvider = GameStateProvider(
-      gameEngine: WaterSortGameEngine(),
-      levelGenerator: WaterSortLevelGenerator(),
-    );
-    
     // Record start time
     _levelStartTime = DateTime.now();
     
@@ -53,10 +52,13 @@ class _GameScreenState extends State<GameScreen> {
     
     // Initialize the level
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final gameStateProvider = context.read<GameStateProvider>();
+      
       if (widget.level != null) {
-        _gameStateProvider.initializeLevelFromData(widget.level!);
+        gameStateProvider.initializeLevelFromData(widget.level!);
       } else {
-        _gameStateProvider.initializeLevel(1);
+        final levelIdToUse = widget.levelId ?? 1;
+        gameStateProvider.initializeLevel(levelIdToUse);
       }
     });
   }
@@ -64,17 +66,19 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void dispose() {
     _timer?.cancel();
-    _gameStateProvider.dispose();
     super.dispose();
   }
 
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       // Only update the UI if the widget is still mounted, not paused, and game is not completed
-      if (mounted && !_isPaused && !(_gameStateProvider.isVictory || _gameStateProvider.currentGameState?.isCompleted == true)) {
-        setState(() {
-          // This will trigger a rebuild and update the timer display
-        });
+      if (mounted && !_isPaused) {
+        final gameStateProvider = context.read<GameStateProvider>();
+        if (!(gameStateProvider.isVictory || gameStateProvider.currentGameState?.isCompleted == true)) {
+          setState(() {
+            // This will trigger a rebuild and update the timer display
+          });
+        }
       }
     });
   }
@@ -84,6 +88,9 @@ class _GameScreenState extends State<GameScreen> {
     final totalElapsed = DateTime.now().difference(_levelStartTime);
     final activeElapsed = totalElapsed - _totalPausedTime;
     final timeInSeconds = activeElapsed.inSeconds;
+    
+    // Handle level completion with test mode awareness
+    _handleLevelCompletion(gameState, timeInSeconds);
     
     // Call completion callback if provided
     if (widget.onLevelCompleted != null && widget.level != null) {
@@ -98,6 +105,14 @@ class _GameScreenState extends State<GameScreen> {
       Navigator.of(context).pop();
       return;
     }
+    
+    // Get dependencies from context
+    final progressOverride = context.read<ProgressOverride>();
+    final testModeManager = context.read<TestModeManager>();
+    
+    // Determine if this completion will be recorded in actual progress
+    final isLegitimateCompletion = progressOverride.shouldRecordCompletion(gameState.levelId);
+    final isTestMode = testModeManager.isTestModeEnabled;
     
     showDialog(
       context: context,
@@ -133,14 +148,46 @@ class _GameScreenState extends State<GameScreen> {
                   color: Colors.green[700],
                 ),
               ),
+              // Show test mode warning if completion won't be recorded
+              if (isTestMode && !isLegitimateCompletion) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    border: Border.all(color: Colors.orange, width: 1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: Colors.orange[700],
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Test mode: This completion won\'t affect your actual progress.',
+                          style: TextStyle(
+                            color: Colors.orange[700],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                _gameStateProvider.restartCurrentLevel();
-                _gameStateProvider.dismissVictory();
+                final gameStateProvider = context.read<GameStateProvider>();
+                gameStateProvider.restartCurrentLevel();
+                gameStateProvider.dismissVictory();
                 _levelStartTime = DateTime.now(); // Reset timer
               },
               child: const Text('Restart Level'),
@@ -148,8 +195,9 @@ class _GameScreenState extends State<GameScreen> {
             ElevatedButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                _gameStateProvider.progressToNextLevel();
-                _gameStateProvider.dismissVictory();
+                final gameStateProvider = context.read<GameStateProvider>();
+                gameStateProvider.progressToNextLevel();
+                gameStateProvider.dismissVictory();
                 _levelStartTime = DateTime.now(); // Reset timer
               },
               child: const Text('Next Level'),
@@ -158,6 +206,22 @@ class _GameScreenState extends State<GameScreen> {
         );
       },
     );
+  }
+
+  /// Handle level completion with test mode awareness
+  Future<void> _handleLevelCompletion(GameState gameState, int timeInSeconds) async {
+    try {
+      // Get ProgressOverride from context and use it to handle completion (respects test mode)
+      final progressOverride = context.read<ProgressOverride>();
+      await progressOverride.completeLevel(
+        levelId: gameState.levelId,
+        moves: gameState.effectiveMoveCount,
+        timeInSeconds: timeInSeconds,
+      );
+    } catch (e) {
+      // Handle completion error gracefully
+      debugPrint('Error completing level: $e');
+    }
   }
 
   void _pauseGame() {
@@ -208,8 +272,9 @@ class _GameScreenState extends State<GameScreen> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                _gameStateProvider.restartCurrentLevel();
-                _gameStateProvider.dismissVictory();
+                final gameStateProvider = context.read<GameStateProvider>();
+                gameStateProvider.restartCurrentLevel();
+                gameStateProvider.dismissVictory();
                 _resetTimer();
               },
               child: const Text('Restart Level'),
@@ -229,28 +294,48 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider.value(
-      value: _gameStateProvider,
-      child: Consumer<GameStateProvider>(
-        builder: (context, provider, child) {
-          final gameState = provider.currentGameState;
-          
-          // Show victory dialog when victory state is reached
-          if (provider.isVictory && gameState != null) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _showVictoryDialog(gameState);
-            });
-          }
-          
-          return Scaffold(
-            appBar: AppBar(
-              title: gameState != null 
-                  ? Text('Level ${gameState.levelId}')
-                  : const Text('Water Sort Puzzle'),
-              backgroundColor: Colors.blue[600],
-              foregroundColor: Colors.white,
-              centerTitle: true,
-            ),
+    return Consumer<GameStateProvider>(
+      builder: (context, provider, child) {
+        final gameState = provider.currentGameState;
+        
+        // Show victory dialog when victory state is reached
+        if (provider.isVictory && gameState != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _showVictoryDialog(gameState);
+          });
+        }
+        
+        return Scaffold(
+          appBar: AppBar(
+            title: gameState != null 
+                ? Text('Level ${gameState.levelId}')
+                : const Text('Water Sort Puzzle'),
+            backgroundColor: Colors.blue[600],
+            foregroundColor: Colors.white,
+            centerTitle: true,
+            actions: [
+              // Test mode indicator in AppBar
+              Consumer<TestModeManager>(
+                builder: (context, testModeManager, child) {
+                  return StreamBuilder<bool>(
+                    stream: testModeManager.testModeStream,
+                    initialData: testModeManager.isTestModeEnabled,
+                    builder: (context, snapshot) {
+                      final indicator = testModeManager.getTestModeIndicator();
+                      if (indicator == null) return const SizedBox.shrink();
+                      
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 16.0),
+                        child: Center(
+                          child: TestModeIndicatorWidget(indicator: indicator),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ],
+          ),
             body: Stack(
               children: [
                 Container(
@@ -484,7 +569,7 @@ class _GameScreenState extends State<GameScreen> {
                 // Loading overlay
                 if (provider.isLoading)
                   Container(
-                    color: Colors.black.withValues(alpha: 0.3),
+                    color: Colors.black.withOpacity(0.3),
                     child: const Center(
                       child: CircularProgressIndicator(),
                     ),
@@ -493,18 +578,12 @@ class _GameScreenState extends State<GameScreen> {
             ),
           );
         },
-      ),
-    );
+      );
   }
 
   /// Get elapsed time since level start in a formatted string
   String _getElapsedTime() {
     if (_isPaused) return 'Paused';
-    
-    // If game is completed, show final time (don't continue counting)
-    if (_gameStateProvider.isVictory || _gameStateProvider.currentGameState?.isCompleted == true) {
-      return 'Completed';
-    }
     
     // Calculate total elapsed time minus paused time
     final totalElapsed = DateTime.now().difference(_levelStartTime);
@@ -666,7 +745,7 @@ class _GameBoardSection extends StatelessWidget {
             // Pause overlay
             if (isPaused)
               Container(
-                color: Colors.black.withValues(alpha: 0.3),
+                color: Colors.black.withOpacity(0.3),
                 child: const Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,

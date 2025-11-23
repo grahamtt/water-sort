@@ -262,7 +262,7 @@
   - Write tests for error handling scenarios
   - _Requirements: 3.5, 2.4, 2.5_
 
-- [ ] 17. Implement loss detection system
+- [x] 17. Implement loss detection system
 
   - Create MoveValidator class with getAllValidMoves method
   - Implement move validation logic for all container combinations
@@ -271,7 +271,7 @@
   - Write comprehensive unit tests for loss detection edge cases
   - _Requirements: 11.1, 11.4, 11.5_
 
-- [ ] 17.1 Add loss state management and UI components
+- [x] 17.1 Add loss state management and UI components
 
   - Update GameState model to include isLost boolean field
   - Create LossDialog widget for simple loss notification
@@ -280,7 +280,7 @@
   - Write widget tests for loss UI components
   - _Requirements: 11.2, 11.3, 11.6_
 
-- [ ] 17.2 Integrate loss detection into game flow
+- [x] 17.2 Integrate loss detection into game flow
 
   - Add loss condition checking to game state provider
   - Implement loss detection triggers after each move

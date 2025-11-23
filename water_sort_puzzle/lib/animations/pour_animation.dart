@@ -141,6 +141,21 @@ class VictoryState extends AnimationState {
   int get hashCode => celebrationDuration.hashCode;
 }
 
+/// Loss state animation is playing
+class LossState extends AnimationState {
+  final String message;
+  
+  const LossState(this.message);
+  
+  @override
+  bool operator ==(Object other) {
+    return other is LossState && other.message == message;
+  }
+  
+  @override
+  int get hashCode => message.hashCode;
+}
+
 /// Animation progress data for liquid transfer
 class PourAnimationProgress {
   /// Progress from 0.0 to 1.0

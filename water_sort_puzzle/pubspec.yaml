@@ -67,6 +67,9 @@ dev_dependencies:
   # Hive code generation
   hive_generator: ^2.0.1
 
+  # Testing dependencies
+  mockito: ^5.4.2
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 

@@ -3,6 +3,7 @@ import '../models/pour_result.dart';
 import '../models/container.dart';
 import '../models/move.dart';
 import 'audio_manager.dart';
+import 'loss_detector.dart';
 
 /// Abstract base class for the water sort puzzle game engine
 abstract class GameEngine {
@@ -20,6 +21,9 @@ abstract class GameEngine {
   
   /// Check if the current game state represents a win condition
   bool checkWinCondition(GameState gameState);
+  
+  /// Check if the current game state represents a loss condition
+  bool checkLossCondition(GameState gameState);
   
   /// Validate if a pour operation is allowed
   PourResult validatePour(GameState gameState, int fromContainerId, int toContainerId);
@@ -85,6 +89,11 @@ class WaterSortGameEngine implements GameEngine {
   @override
   bool checkWinCondition(GameState gameState) {
     return gameState.isSolved;
+  }
+  
+  @override
+  bool checkLossCondition(GameState gameState) {
+    return LossDetector.hasLost(gameState);
   }
   
   @override
