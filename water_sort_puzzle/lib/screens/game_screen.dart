@@ -266,127 +266,9 @@ class _GameScreenState extends State<GameScreen> {
                         ? const Center(child: CircularProgressIndicator())
                         : Column(
                             children: [
-                              // Enhanced game info panel
-                              Container(
-                                margin: const EdgeInsets.all(16.0),
-                                padding: const EdgeInsets.all(16.0),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.1),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: Column(
-                                  children: [
-                                    // Top row with level and status
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Level ${gameState.levelId}',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .titleLarge
-                                                  ?.copyWith(
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.blue[800],
-                                                  ),
-                                            ),
-                                            Text(
-                                              '${gameState.containers.length} containers',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall
-                                                  ?.copyWith(color: Colors.grey[600]),
-                                            ),
-                                          ],
-                                        ),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 6,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: gameState.isSolved
-                                                ? Colors.green[100]
-                                                : Colors.orange[100],
-                                            borderRadius: BorderRadius.circular(20),
-                                            border: Border.all(
-                                              color: gameState.isSolved
-                                                  ? Colors.green[300]!
-                                                  : Colors.orange[300]!,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                gameState.isSolved
-                                                    ? Icons.check_circle
-                                                    : Icons.play_circle_outline,
-                                                color: gameState.isSolved
-                                                    ? Colors.green[700]
-                                                    : Colors.orange[700],
-                                                size: 16,
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                gameState.isSolved ? 'Solved' : 'In Progress',
-                                                style: TextStyle(
-                                                  color: gameState.isSolved
-                                                      ? Colors.green[700]
-                                                      : Colors.orange[700],
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 12),
-                                    // Bottom row with moves and undo info
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                      children: [
-                                        _InfoCard(
-                                          icon: Icons.touch_app,
-                                          value: '${gameState.effectiveMoveCount}',
-                                          label: 'Moves',
-                                          color: Colors.blue[700]!,
-                                        ),
-                                        _InfoCard(
-                                          icon: Icons.undo,
-                                          value: provider.canUndo ? 'Available' : 'None',
-                                          label: 'Undo',
-                                          color: provider.canUndo 
-                                              ? Colors.green[700]! 
-                                              : Colors.grey[500]!,
-                                        ),
-                                        _InfoCard(
-                                          icon: Icons.timer,
-                                          value: _getElapsedTime(),
-                                          label: 'Time',
-                                          color: Colors.purple[700]!,
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-
                               // Instructions or feedback message
                               Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                                 child: Text(
                                   provider.feedbackMessage ?? 
                                       'Tap a container to select it, then tap another to pour liquid',
@@ -404,8 +286,6 @@ class _GameScreenState extends State<GameScreen> {
                                   textAlign: TextAlign.center,
                                 ),
                               ),
-
-                              const SizedBox(height: 16),
 
                               // Game board
                               Expanded(
@@ -497,80 +377,6 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-  /// Get elapsed time since level start in a formatted string
-  String _getElapsedTime() {
-    if (_isPaused) return 'Paused';
-    
-    // If game is completed, show final time (don't continue counting)
-    if (_gameStateProvider.isVictory || _gameStateProvider.currentGameState?.isCompleted == true) {
-      return 'Completed';
-    }
-    
-    // Calculate total elapsed time minus paused time
-    final totalElapsed = DateTime.now().difference(_levelStartTime);
-    final activeElapsed = totalElapsed - _totalPausedTime;
-    
-    final minutes = activeElapsed.inMinutes;
-    final seconds = activeElapsed.inSeconds % 60;
-    
-    if (minutes > 0) {
-      return '${minutes}m ${seconds}s';
-    } else {
-      return '${seconds}s';
-    }
-  }
-}
-
-/// Info card widget for displaying game statistics
-class _InfoCard extends StatelessWidget {
-  final IconData icon;
-  final String value;
-  final String label;
-  final Color color;
-
-  const _InfoCard({
-    required this.icon,
-    required this.value,
-    required this.label,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(
-            icon,
-            color: color,
-            size: 20,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: color,
-            fontSize: 14,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 /// Control button widget for the bottom control panel
@@ -638,66 +444,113 @@ class _GameBoardSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<GameStateProvider>(
       builder: (context, provider, child) {
-        return Stack(
-          children: [
-            GridView.builder(
-              padding: const EdgeInsets.all(16),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                childAspectRatio: 0.6,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-              ),
-              itemCount: gameState.containers.length,
-              itemBuilder: (context, index) {
-                final container = gameState.containers[index];
-                final isSelected = provider.selectedContainerId == container.id;
-                
-                return ContainerWidget(
-                  container: container,
-                  isSelected: isSelected,
-                  showSelectionAnimation: true,
-                  onTap: provider.isAnimating || isPaused
-                      ? null 
-                      : () => provider.selectContainer(container.id),
-                );
-              },
-            ),
-            // Pause overlay
-            if (isPaused)
-              Container(
-                color: Colors.black.withValues(alpha: 0.3),
-                child: const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.pause_circle_filled,
-                        size: 64,
-                        color: Colors.white,
-                      ),
-                      SizedBox(height: 16),
-                      Text(
-                        'Game Paused',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Tap the pause button to resume',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            // Calculate optimal grid layout to fit all containers on screen
+            final containerCount = gameState.containers.length;
+            final availableWidth = constraints.maxWidth;
+            final availableHeight = constraints.maxHeight;
+            
+            // Try different column counts to find the best fit
+            int bestCrossAxisCount = 3;
+            double bestContainerHeight = 0;
+            
+            for (int cols = 2; cols <= 5; cols++) {
+              final rows = (containerCount / cols).ceil();
+              final spacing = 16.0;
+              final padding = 16.0;
+              
+              // Calculate container dimensions for this layout
+              final totalHorizontalSpacing = spacing * (cols - 1) + padding * 2;
+              final totalVerticalSpacing = spacing * (rows - 1) + padding * 2;
+              
+              final containerWidth = (availableWidth - totalHorizontalSpacing) / cols;
+              final containerHeight = (availableHeight - totalVerticalSpacing) / rows;
+              
+              // Container aspect ratio should be around 0.6 (width/height)
+              // So height should be width / 0.6 = width * 1.67
+              final idealHeight = containerWidth * 1.67;
+              
+              // Use the smaller of calculated height or ideal height
+              final actualHeight = containerHeight < idealHeight ? containerHeight : idealHeight;
+              
+              // Choose layout that gives largest container height while fitting on screen
+              if (actualHeight > bestContainerHeight && containerHeight >= actualHeight) {
+                bestContainerHeight = actualHeight;
+                bestCrossAxisCount = cols;
+              }
+            }
+            
+            // Calculate final aspect ratio
+            final spacing = 16.0;
+            final padding = 16.0;
+            final totalHorizontalSpacing = spacing * (bestCrossAxisCount - 1) + padding * 2;
+            final containerWidth = (availableWidth - totalHorizontalSpacing) / bestCrossAxisCount;
+            final childAspectRatio = containerWidth / bestContainerHeight;
+            
+            return Stack(
+              children: [
+                GridView.builder(
+                  padding: const EdgeInsets.all(16),
+                  physics: const NeverScrollableScrollPhysics(), // Disable scrolling
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: bestCrossAxisCount,
+                    childAspectRatio: childAspectRatio,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
                   ),
+                  itemCount: containerCount,
+                  itemBuilder: (context, index) {
+                    final container = gameState.containers[index];
+                    final isSelected = provider.selectedContainerId == container.id;
+                    
+                    return ContainerWidget(
+                      container: container,
+                      isSelected: isSelected,
+                      showSelectionAnimation: true,
+                      onTap: provider.isAnimating || isPaused
+                          ? null 
+                          : () => provider.selectContainer(container.id),
+                    );
+                  },
                 ),
-              ),
-          ],
+                // Pause overlay
+                if (isPaused)
+                  Container(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    child: const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.pause_circle_filled,
+                            size: 64,
+                            color: Colors.white,
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            'Game Paused',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Tap the pause button to resume',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
         );
       },
     );
