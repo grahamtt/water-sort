@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/level.dart';
 import '../services/level_generator.dart';
+import '../services/reverse_level_generator.dart';
 import '../services/level_progression.dart';
 import '../storage/game_progress.dart';
 import '../widgets/level_selection_widget.dart';
@@ -42,7 +43,7 @@ class _LevelSelectionScreenState extends State<LevelSelectionScreen> {
     _gameProgress = widget.initialProgress ?? GameProgress();
     
     // Initialize level generator
-    final levelGenerator = widget.levelGenerator ?? WaterSortLevelGenerator();
+    final levelGenerator = widget.levelGenerator ?? ReverseLevelGenerator();
     
     // Generate initial levels (first 50 levels)
     _availableLevels = levelGenerator.generateLevelSeries(1, 50);

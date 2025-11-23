@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/game_state.dart';
 import '../models/level.dart';
 import '../services/game_engine.dart';
-import '../services/level_generator.dart';
+import '../services/reverse_level_generator.dart';
 import '../providers/game_state_provider.dart';
 import '../widgets/container_widget.dart';
 import '../widgets/victory_animation.dart';
@@ -42,7 +42,7 @@ class _GameScreenState extends State<GameScreen> {
     // Initialize the game state provider
     _gameStateProvider = GameStateProvider(
       gameEngine: WaterSortGameEngine(),
-      levelGenerator: WaterSortLevelGenerator(),
+      levelGenerator: ReverseLevelGenerator(),
     );
     
     // Record start time

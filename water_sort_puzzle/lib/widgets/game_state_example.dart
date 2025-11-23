@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_state_provider.dart';
 import '../services/game_engine.dart';
-import '../services/level_generator.dart';
+import '../services/reverse_level_generator.dart';
 
 /// Example widget demonstrating how to use GameStateProvider
 /// This shows reactive UI updates, error handling, and user feedback
@@ -14,7 +14,7 @@ class GameStateExample extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (context) => GameStateProvider(
         gameEngine: WaterSortGameEngine(),
-        levelGenerator: WaterSortLevelGenerator(),
+        levelGenerator: ReverseLevelGenerator(),
       ),
       child: const _GameStateExampleContent(),
     );
