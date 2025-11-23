@@ -14,7 +14,9 @@ void main() {
       expect(config.maxLayersPerContainer, equals(4));
       expect(config.seed, isNull);
       expect(config.maxGenerationAttempts, equals(50));
-      expect(config.maxSolvabilityAttempts, equals(100));
+      expect(config.maxSolvabilityAttempts, equals(1000));
+      expect(config.maxSolvabilityStates, equals(10000));
+      expect(config.enableActualSolvabilityTest, equals(true));
     });
 
     test('should allow custom values', () {

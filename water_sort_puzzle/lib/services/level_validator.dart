@@ -233,14 +233,9 @@ class LevelValidator {
       return false;
     }
     
-    // Must have at least one empty slot for moves
-    final totalEmptySlots = level.initialContainers.fold(
-      0,
-      (sum, container) => sum + container.remainingCapacity,
-    );
-    if (totalEmptySlots == 0) {
-      return false;
-    }
+    // Note: We allow levels with zero empty slots here, as some puzzles can be 
+    // solvable through strategic pouring even without empty containers initially.
+    // The actual solvability test will validate such cases.
     
     // Analyze color distribution and volumes
     final colorVolumes = <String, int>{};
@@ -288,20 +283,10 @@ class LevelValidator {
       }
     }
     
-    // Additional check: Ensure we have enough working space
-    // We need at least one completely empty container or enough partial empty space
-    final emptyContainerCount = level.initialContainers.where((c) => c.isEmpty).length;
-    if (emptyContainerCount == 0) {
-      // If no completely empty containers, check if we have enough partial empty space
-      final totalPartialEmptySpace = level.initialContainers
-          .where((c) => !c.isEmpty && !c.isFull)
-          .fold(0, (sum, c) => sum + c.remainingCapacity);
-      
-      // Need at least one container's worth of empty space for complex moves
-      if (totalPartialEmptySpace < standardCapacity) {
-        return false;
-      }
-    }
+    // Note: We allow levels with no empty space here, as the actual solvability
+    // test will determine if such levels are truly solvable through strategic moves.
+    // This heuristic check focuses on color distribution and fragmentation rather
+    // than requiring empty containers.
     
     return true;
   }

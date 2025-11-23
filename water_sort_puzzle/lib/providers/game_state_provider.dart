@@ -27,7 +27,6 @@ enum GameUIState {
   containerSelected,
   pouring,
   victory,
-  loss,
   error,
 }
 
@@ -72,11 +71,10 @@ class GameStateProvider extends ChangeNotifier {
   // Convenience getters
   bool get isLoading => _loadingState != GameLoadingState.idle;
   bool get hasError => _loadingState == GameLoadingState.error || _uiState == GameUIState.error;
-  bool get isGameActive => _currentGameState != null && !_currentGameState!.isCompleted && !_currentGameState!.isLost;
+  bool get isGameActive => _currentGameState != null && !_currentGameState!.isCompleted;
   bool get canUndo => _currentGameState?.canUndo ?? false;
   bool get canRedo => _currentGameState?.canRedo ?? false;
   bool get isVictory => _uiState == GameUIState.victory;
-  bool get isLoss => _uiState == GameUIState.loss;
   
   /// Initialize a new level
   Future<void> initializeLevel(int levelId) async {
@@ -189,9 +187,6 @@ class GameStateProvider extends ChangeNotifier {
         // Check for victory immediately (don't wait for animation)
         if (_gameEngine.checkWinCondition(newGameState)) {
           await _handleVictory(newGameState);
-        } else if (newGameState.isLost) {
-          // Check for loss condition
-          await _handleLoss(newGameState);
         } else {
           _setUIState(GameUIState.idle);
         }
@@ -249,14 +244,12 @@ class GameStateProvider extends ChangeNotifier {
         // Play light haptic feedback for redo
         _audioManager.lightHaptic();
         
-        // Check for victory or loss after redo
+        // Check for victory after redo
         if (_gameEngine.checkWinCondition(newGameState)) {
           _setUIState(GameUIState.victory);
           _setFeedbackMessage('Congratulations! Level completed!');
           // Victory audio feedback will be handled by _handleVictory
           await _handleVictory(newGameState);
-        } else if (newGameState.isLost) {
-          await _handleLoss(newGameState);
         }
         
         // Clear feedback after a delay (non-blocking)
@@ -349,14 +342,6 @@ class GameStateProvider extends ChangeNotifier {
   /// Dismiss victory state and prepare for next level
   void dismissVictory() {
     if (_uiState == GameUIState.victory) {
-      _setUIState(GameUIState.idle);
-      _clearFeedback();
-    }
-  }
-  
-  /// Dismiss loss state
-  void dismissLoss() {
-    if (_uiState == GameUIState.loss) {
       _setUIState(GameUIState.idle);
       _clearFeedback();
     }
@@ -489,20 +474,6 @@ class GameStateProvider extends ChangeNotifier {
     
     // Mark the level as completed in the game state
     _currentGameState = gameState.copyWith(isCompleted: true);
-    
-    notifyListeners();
-  }
-  
-  /// Handle loss condition when no legal moves remain
-  Future<void> _handleLoss(GameState gameState) async {
-    _setUIState(GameUIState.loss);
-    
-    // Play error sound and haptic feedback for loss
-    _audioManager.playErrorSound();
-    _audioManager.heavyHaptic();
-    
-    // Set loss message
-    _setFeedbackMessage('No legal moves remaining! Try restarting or undoing moves.');
     
     notifyListeners();
   }

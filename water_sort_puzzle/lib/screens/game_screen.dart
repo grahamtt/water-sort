@@ -34,8 +34,6 @@ class _GameScreenState extends State<GameScreen> {
   DateTime? _pauseStartTime;
   Duration _totalPausedTime = Duration.zero;
   Timer? _timer;
-  bool _victoryDialogShown = false;
-  bool _lossDialogShown = false;
 
   @override
   void initState() {
@@ -162,69 +160,6 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-  void _showLossDialog(GameState gameState) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('😔 No Legal Moves'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'No legal moves remaining!',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'You can undo moves to try a different approach, or restart the level.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Moves made: ${gameState.effectiveMoveCount}',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.orange[700],
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            if (gameState.canUndo)
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _gameStateProvider.undoMove();
-                  _gameStateProvider.dismissLoss();
-                },
-                child: const Text('Undo Move'),
-              ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _gameStateProvider.restartCurrentLevel();
-                _gameStateProvider.dismissLoss();
-                _resetTimer();
-              },
-              child: const Text('Restart Level'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                Navigator.of(context).pop(); // Go back to level selection
-              },
-              child: const Text('Exit'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   void _pauseGame() {
     setState(() {
       _isPaused = true;
@@ -300,24 +235,11 @@ class _GameScreenState extends State<GameScreen> {
         builder: (context, provider, child) {
           final gameState = provider.currentGameState;
           
-          // Show victory dialog when victory state is reached (only once)
-          if (provider.isVictory && gameState != null && !_victoryDialogShown) {
-            _victoryDialogShown = true;
+          // Show victory dialog when victory state is reached
+          if (provider.isVictory && gameState != null) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _showVictoryDialog(gameState);
             });
-          } else if (!provider.isVictory) {
-            _victoryDialogShown = false;
-          }
-          
-          // Show loss dialog when loss state is reached (only once)
-          if (provider.isLoss && gameState != null && !_lossDialogShown) {
-            _lossDialogShown = true;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _showLossDialog(gameState);
-            });
-          } else if (!provider.isLoss) {
-            _lossDialogShown = false;
           }
           
           return Scaffold(

@@ -7,6 +7,7 @@ import '../models/game_state.dart';
 import 'game_engine.dart';
 import 'level_similarity_checker.dart';
 import 'level_validator.dart';
+import 'audio_manager.dart';
 
 /// Configuration for level generation
 class LevelGenerationConfig {
@@ -34,6 +35,12 @@ class LevelGenerationConfig {
   /// Maximum attempts to validate solvability
   final int maxSolvabilityAttempts;
 
+  /// Maximum states to explore during solvability check (prevents infinite loops)
+  final int maxSolvabilityStates;
+
+  /// Whether to enable actual solvability testing (vs heuristic only)
+  final bool enableActualSolvabilityTest;
+
   const LevelGenerationConfig({
     this.containerCapacity = 4,
     this.minEmptySlots = 1,
@@ -42,7 +49,9 @@ class LevelGenerationConfig {
     this.maxLayersPerContainer = 4,
     this.seed,
     this.maxGenerationAttempts = 50,
-    this.maxSolvabilityAttempts = 100,
+    this.maxSolvabilityAttempts = 1000,
+    this.maxSolvabilityStates = 10000,
+    this.enableActualSolvabilityTest = true,
   });
 }
 
@@ -222,14 +231,17 @@ class WaterSortLevelGenerator implements LevelGenerator {
       return false;
     }
 
-    // Check basic heuristics first (faster)
+    // Check basic heuristics first (faster, catches obvious issues)
     if (!_checkSolvabilityHeuristic(level)) {
       return false;
     }
 
-    // For now, use heuristic check only (actual solvability test can be enabled later)
-    // TODO: Enable actual solvability test when performance is optimized
-    // return _testActualSolvability(level);
+    // If enabled, perform actual solvability test
+    if (config.enableActualSolvabilityTest) {
+      return _testActualSolvability(level);
+    }
+
+    // Fallback to heuristic only if actual test is disabled
     return true;
   }
 
@@ -473,38 +485,49 @@ class WaterSortLevelGenerator implements LevelGenerator {
   }
 
   /// Test if a level is actually solvable by attempting to solve it
+  /// Uses an optimized BFS approach with pruning and move ordering
   bool _testActualSolvability(Level level) {
     try {
-      final gameEngine = WaterSortGameEngine();
+      // Use a game engine without audio for testing (avoids Flutter binding issues)
+      final gameEngine = WaterSortGameEngine(
+        audioManager: AudioManager(audioPlayer: MockAudioPlayer()),
+      );
       final initialState = gameEngine.initializeLevel(
         level.id,
         level.initialContainers,
       );
 
-      // Use a simple breadth-first search to test solvability
-      return _attemptSolveWithBFS(gameEngine, initialState);
+      // Check if already solved (shouldn't happen, but safety check)
+      if (gameEngine.checkWinCondition(initialState)) {
+        return false; // Level is already solved, not a valid puzzle
+      }
+
+      // Use optimized breadth-first search to test solvability
+      return _attemptSolveWithOptimizedBFS(gameEngine, initialState);
     } catch (e) {
       // If any error occurs during solving attempt, consider it unsolvable
       return false;
     }
   }
 
-  /// Attempt to solve the level using breadth-first search
-  bool _attemptSolveWithBFS(
+  /// Attempt to solve the level using optimized breadth-first search
+  /// Includes pruning, move ordering, and state limits to ensure performance
+  bool _attemptSolveWithOptimizedBFS(
     WaterSortGameEngine gameEngine,
     GameState initialState,
   ) {
     final visited = <String>{};
-    final queue = <GameState>[initialState];
-    int attempts = 0;
+    final queue = <_SearchNode>[_SearchNode(initialState, 0)];
+    int statesExplored = 0;
 
-    while (queue.isNotEmpty && attempts < config.maxSolvabilityAttempts) {
-      attempts++;
-      final currentState = queue.removeAt(0);
+    while (queue.isNotEmpty && statesExplored < config.maxSolvabilityStates) {
+      final node = queue.removeAt(0);
+      final currentState = node.state;
+      statesExplored++;
 
       // Check if this state is solved
       if (gameEngine.checkWinCondition(currentState)) {
-        return true;
+        return true; // Found a solution!
       }
 
       // Generate a state signature to avoid revisiting the same state
@@ -514,29 +537,28 @@ class WaterSortLevelGenerator implements LevelGenerator {
       }
       visited.add(stateSignature);
 
-      // Try all possible moves from this state
-      for (int fromId = 0; fromId < currentState.containers.length; fromId++) {
-        for (int toId = 0; toId < currentState.containers.length; toId++) {
-          if (fromId == toId) continue;
+      // Prune if depth is too large (prevents exploring inefficient solutions)
+      if (node.depth > config.maxSolvabilityAttempts) {
+        continue;
+      }
 
-          final pourResult = gameEngine.validatePour(
+      // Generate and prioritize moves
+      final moves = _generatePrioritizedMoves(gameEngine, currentState);
+
+      // Try all prioritized moves
+      for (final move in moves) {
+        try {
+          final newState = gameEngine.executePour(
             currentState,
-            fromId,
-            toId,
+            move.fromId,
+            move.toId,
           );
-          if (pourResult.isSuccess) {
-            try {
-              final newState = gameEngine.executePour(
-                currentState,
-                fromId,
-                toId,
-              );
-              queue.add(newState);
-            } catch (e) {
-              // Skip invalid moves
-              continue;
-            }
-          }
+          
+          // Add to queue with incremented depth
+          queue.add(_SearchNode(newState, node.depth + 1));
+        } catch (e) {
+          // Skip invalid moves
+          continue;
         }
       }
     }
@@ -545,18 +567,113 @@ class WaterSortLevelGenerator implements LevelGenerator {
     return false;
   }
 
+  /// Generate prioritized moves for better search efficiency
+  /// Prioritizes moves that are more likely to lead to a solution
+  List<_PrioritizedMove> _generatePrioritizedMoves(
+    WaterSortGameEngine gameEngine,
+    GameState currentState,
+  ) {
+    final moves = <_PrioritizedMove>[];
+
+    for (int fromId = 0; fromId < currentState.containers.length; fromId++) {
+      final fromContainer = currentState.containers[fromId];
+      if (fromContainer.isEmpty) continue;
+
+      for (int toId = 0; toId < currentState.containers.length; toId++) {
+        if (fromId == toId) continue;
+
+        final pourResult = gameEngine.validatePour(
+          currentState,
+          fromId,
+          toId,
+        );
+        
+        if (pourResult.isSuccess) {
+          final toContainer = currentState.containers[toId];
+          final priority = _calculateMovePriority(
+            fromContainer,
+            toContainer,
+            currentState,
+          );
+          moves.add(_PrioritizedMove(fromId, toId, priority));
+        }
+      }
+    }
+
+    // Sort by priority (higher priority first)
+    moves.sort((a, b) => b.priority.compareTo(a.priority));
+    return moves;
+  }
+
+  /// Calculate priority for a move (higher is better)
+  /// Prioritizes moves that:
+  /// 1. Complete a container (pour into same color to fill it)
+  /// 2. Empty a container completely
+  /// 3. Consolidate colors
+  int _calculateMovePriority(
+    Container fromContainer,
+    Container toContainer,
+    GameState state,
+  ) {
+    int priority = 0;
+
+    final topLayer = fromContainer.getTopContinuousLayer()!;
+
+    // High priority: Pouring into empty container
+    if (toContainer.isEmpty) {
+      priority += 100;
+      
+      // Even higher if this empties the source container
+      if (fromContainer.currentVolume == topLayer.volume) {
+        priority += 200;
+      }
+    }
+    // High priority: Pouring into same color
+    else if (toContainer.topColor == topLayer.color) {
+      priority += 150;
+      
+      // Bonus if this completes the target container
+      if (toContainer.remainingCapacity == topLayer.volume) {
+        priority += 100;
+      }
+      
+      // Bonus if this empties the source container
+      if (fromContainer.currentVolume == topLayer.volume) {
+        priority += 100;
+      }
+    }
+
+    // Bonus for consolidating (moving all of one color)
+    if (fromContainer.isSorted && !fromContainer.isFull) {
+      priority += 50;
+    }
+
+    // Penalty for breaking up sorted containers
+    if (fromContainer.isSorted && fromContainer.isFull) {
+      priority -= 50;
+    }
+
+    return priority;
+  }
+
   /// Generate a unique signature for a game state to detect duplicates
+  /// Uses a normalized representation that is order-independent
   String _generateStateSignature(GameState gameState) {
     final containerSignatures = <String>[];
 
     for (final container in gameState.containers) {
-      final layerSignatures = container.liquidLayers
-          .map((layer) => '${layer.color.name}:${layer.volume}')
-          .join(',');
-      containerSignatures.add('[$layerSignatures]');
+      if (container.isEmpty) {
+        containerSignatures.add('[empty]');
+      } else {
+        final layerSignatures = container.liquidLayers
+            .map((layer) => '${layer.color.name}:${layer.volume}')
+            .join(',');
+        containerSignatures.add('[$layerSignatures]');
+      }
     }
 
     // Sort container signatures to make the state signature order-independent
+    // This is crucial for detecting equivalent states with containers in different positions
     containerSignatures.sort();
     return containerSignatures.join('|');
   }
@@ -698,4 +815,21 @@ class WaterSortLevelGenerator implements LevelGenerator {
 
     return tags;
   }
+}
+
+/// Helper class to track search state with depth for BFS
+class _SearchNode {
+  final GameState state;
+  final int depth;
+
+  _SearchNode(this.state, this.depth);
+}
+
+/// Helper class to represent a prioritized move
+class _PrioritizedMove {
+  final int fromId;
+  final int toId;
+  final int priority;
+
+  _PrioritizedMove(this.fromId, this.toId, this.priority);
 }

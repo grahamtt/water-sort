@@ -23,9 +23,6 @@ class GameState {
   /// Whether the current puzzle is completed
   final bool isCompleted;
 
-  /// Whether the game is lost (no legal moves remaining)
-  final bool isLost;
-
   /// Total number of moves made
   final int moveCount;
 
@@ -39,7 +36,6 @@ class GameState {
     required this.initialContainers,
     required this.moveHistory,
     required this.isCompleted,
-    required this.isLost,
     required this.moveCount,
     required this.currentMoveIndex,
   });
@@ -55,7 +51,6 @@ class GameState {
       initialContainers: containers.map((c) => c.copyWith()).toList(),
       moveHistory: [],
       isCompleted: false,
-      isLost: false,
       moveCount: 0,
       currentMoveIndex: -1,
     );
@@ -68,7 +63,6 @@ class GameState {
     List<Container>? initialContainers,
     List<Move>? moveHistory,
     bool? isCompleted,
-    bool? isLost,
     int? moveCount,
     int? currentMoveIndex,
   }) {
@@ -78,7 +72,6 @@ class GameState {
       initialContainers: initialContainers ?? List.from(this.initialContainers),
       moveHistory: moveHistory ?? List.from(this.moveHistory),
       isCompleted: isCompleted ?? this.isCompleted,
-      isLost: isLost ?? this.isLost,
       moveCount: moveCount ?? this.moveCount,
       currentMoveIndex: currentMoveIndex ?? this.currentMoveIndex,
     );
@@ -205,8 +198,6 @@ class GameState {
       containers: newContainers,
       currentMoveIndex: targetMoveIndex,
       isCompleted: _checkIfCompleted(newContainers),
-      // Reset loss condition when undoing - it will be recalculated if needed
-      isLost: false,
     );
   }
 
@@ -222,8 +213,6 @@ class GameState {
       containers: newContainers,
       currentMoveIndex: targetMoveIndex,
       isCompleted: _checkIfCompleted(newContainers),
-      // Reset loss condition when redoing - it will be recalculated if needed
-      isLost: false,
     );
   }
 
@@ -246,7 +235,6 @@ class GameState {
       initialContainers: initialContainers,
       moveHistory: moveHistory,
       isCompleted: false,
-      isLost: false,
       moveCount: moveCount,
       currentMoveIndex: currentMoveIndex,
     );
@@ -292,7 +280,6 @@ class GameState {
         _listEquals(other.initialContainers, initialContainers) &&
         _listEquals(other.moveHistory, moveHistory) &&
         other.isCompleted == isCompleted &&
-        other.isLost == isLost &&
         other.moveCount == moveCount &&
         other.currentMoveIndex == currentMoveIndex;
   }
@@ -304,7 +291,6 @@ class GameState {
     Object.hashAll(initialContainers),
     Object.hashAll(moveHistory),
     isCompleted,
-    isLost,
     moveCount,
     currentMoveIndex,
   );
@@ -312,7 +298,7 @@ class GameState {
   @override
   String toString() {
     return 'GameState(level: $levelId, containers: ${containers.length}, '
-        'moves: $effectiveMoveCount/$moveCount, completed: $isCompleted, lost: $isLost)';
+        'moves: $effectiveMoveCount/$moveCount, completed: $isCompleted)';
   }
 
   /// Helper method to compare lists

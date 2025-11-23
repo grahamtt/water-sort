@@ -36,7 +36,11 @@ abstract class GameEngine {
 
 /// Concrete implementation of the game engine
 class WaterSortGameEngine implements GameEngine {
-  final AudioManager _audioManager = AudioManager();
+  final AudioManager _audioManager;
+  
+  WaterSortGameEngine({AudioManager? audioManager})
+      : _audioManager = audioManager ?? AudioManager();
+  
   @override
   GameState initializeLevel(int levelId, List<Container> containers) {
     // Create deep copies of containers to avoid reference issues
@@ -181,58 +185,29 @@ class WaterSortGameEngine implements GameEngine {
       timestamp: DateTime.now(),
     );
     
-    // Create the new game state with the move added
-    final newState = currentState.addMove(move, newContainers);
-    
-    // Check if the game is now in a lost state (no legal moves remaining)
-    final isLost = checkLossCondition(newState);
-    
-    // Return the new game state with loss condition updated
-    return newState.copyWith(isLost: isLost);
+    // Return the new game state with the move added
+    return currentState.addMove(move, newContainers);
   }
   
   @override
   bool hasLegalMoves(GameState gameState) {
-    // If the game is already solved, no need to check for moves
-    if (gameState.isSolved) return false;
-    
-    // Try all possible combinations of source and target containers
-    for (final sourceContainer in gameState.containers) {
-      // Skip empty containers as they can't be poured from
-      if (sourceContainer.isEmpty) continue;
-      
-      // Skip containers that are already sorted and full
-      // (no point in pouring from a solved container)
-      if (sourceContainer.isSorted && sourceContainer.isFull) continue;
-      
-      for (final targetContainer in gameState.containers) {
-        // Skip if source and target are the same
-        if (sourceContainer.id == targetContainer.id) continue;
+    // Check if any valid pour exists
+    for (int fromId = 0; fromId < gameState.containers.length; fromId++) {
+      for (int toId = 0; toId < gameState.containers.length; toId++) {
+        if (fromId == toId) continue;
         
-        // Check if this pour would be valid
-        final result = validatePour(
-          gameState,
-          sourceContainer.id,
-          targetContainer.id,
-        );
-        
+        final result = validatePour(gameState, fromId, toId);
         if (result.isSuccess) {
-          // Found at least one legal move
           return true;
         }
       }
     }
-    
-    // No legal moves found
     return false;
   }
   
   @override
   bool checkLossCondition(GameState gameState) {
-    // Game is not lost if it's already solved
-    if (gameState.isSolved) return false;
-    
-    // Game is lost if there are no legal moves remaining
-    return !hasLegalMoves(gameState);
+    // A loss occurs when the game is not solved and there are no legal moves
+    return !checkWinCondition(gameState) && !hasLegalMoves(gameState);
   }
 }
