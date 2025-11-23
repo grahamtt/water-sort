@@ -6,6 +6,7 @@ import '../models/liquid_color.dart';
 import '../models/game_state.dart';
 import 'game_engine.dart';
 import 'level_similarity_checker.dart';
+import 'level_validator.dart';
 
 /// Configuration for level generation
 class LevelGenerationConfig {
@@ -79,6 +80,10 @@ abstract class LevelGenerator {
     int count, {
     int startDifficulty = 1,
   });
+
+  /// Check if a level has any completed containers
+  /// A completed container is one that is full and contains only one color
+  bool hasCompletedContainers(Level level);
 }
 
 /// Concrete implementation of the level generator
@@ -144,8 +149,11 @@ class WaterSortLevelGenerator implements LevelGenerator {
 
         // Validate the level meets all requirements
         if (_validateGeneratedLevel(level)) {
-          // Optimize the level by removing unnecessary empty containers
-          validLevel = optimizeLevel(level);
+          // Apply optimizations after validation
+          // First merge adjacent layers of the same color
+          var optimizedLevel = LevelValidator.mergeAdjacentLayers(level);
+          // Then optimize empty containers
+          validLevel = LevelValidator.optimizeEmptyContainers(optimizedLevel);
         }
       } catch (e) {
         // Continue to next attempt if generation fails
@@ -174,25 +182,36 @@ class WaterSortLevelGenerator implements LevelGenerator {
   ) {
     Level? uniqueLevel;
     int attempts = 0;
-    
-    while (uniqueLevel == null && attempts < LevelSimilarityChecker.maxGenerationAttempts) {
+
+    while (uniqueLevel == null &&
+        attempts < LevelSimilarityChecker.maxGenerationAttempts) {
       attempts++;
-      
+
       // Generate a candidate level
-      final candidate = generateLevel(levelId, difficulty, containerCount, colorCount);
-      
+      final candidate = generateLevel(
+        levelId,
+        difficulty,
+        containerCount,
+        colorCount,
+      );
+
       // Check if it's unique compared to existing levels
       if (!isLevelSimilar(candidate, existingLevels)) {
         uniqueLevel = candidate;
       }
     }
-    
+
     if (uniqueLevel == null) {
       // Fallback: return a regular generated level if we can't find a unique one
       // This ensures the game can continue even if similarity detection is too strict
-      uniqueLevel = generateLevel(levelId, difficulty, containerCount, colorCount);
+      uniqueLevel = generateLevel(
+        levelId,
+        difficulty,
+        containerCount,
+        colorCount,
+      );
     }
-    
+
     return uniqueLevel;
   }
 
@@ -217,7 +236,7 @@ class WaterSortLevelGenerator implements LevelGenerator {
   /// Optimize a level by removing unnecessary empty containers
   /// This ensures levels use the minimum number of containers needed
   Level optimizeLevel(Level level) {
-    return LevelSimilarityChecker.optimizeEmptyContainers(level);
+    return LevelValidator.optimizeEmptyContainers(level);
   }
 
   @override
@@ -254,6 +273,12 @@ class WaterSortLevelGenerator implements LevelGenerator {
     }
 
     return levels;
+  }
+
+  @override
+  bool hasCompletedContainers(Level level) {
+    // Delegate to LevelValidator for consistency
+    return LevelValidator.hasCompletedContainers(level);
   }
 
   /// Select colors for the level
@@ -415,17 +440,12 @@ class WaterSortLevelGenerator implements LevelGenerator {
 
   /// Validate that a generated level meets all requirements
   bool _validateGeneratedLevel(Level level) {
-    // 1. Check that level is not already solved
-    if (_isLevelAlreadySolved(level)) {
+    // Use the LevelValidator to check all requirements including completed containers
+    if (!LevelValidator.validateGeneratedLevel(level)) {
       return false;
     }
 
-    // 2. Check structural validity
-    if (!level.isStructurallyValid) {
-      return false;
-    }
-
-    // 3. Check that we have minimum empty slots
+    // Check that we have minimum empty slots
     final totalEmptySlots = level.initialContainers.fold(
       0,
       (sum, container) => sum + container.remainingCapacity,
@@ -434,7 +454,7 @@ class WaterSortLevelGenerator implements LevelGenerator {
       return false;
     }
 
-    // 4. Test solvability (simplified check for now)
+    // Test solvability (simplified check for now)
     return _checkSolvabilityHeuristic(level);
   }
 

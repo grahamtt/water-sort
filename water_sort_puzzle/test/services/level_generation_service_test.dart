@@ -6,6 +6,7 @@ import 'package:water_sort_puzzle/models/liquid_color.dart';
 import 'package:water_sort_puzzle/services/level_generation_service.dart';
 import 'package:water_sort_puzzle/services/level_generator.dart';
 import 'package:water_sort_puzzle/services/level_similarity_checker.dart';
+import 'package:water_sort_puzzle/services/level_validator.dart';
 
 /// Mock level generator for testing
 class MockLevelGenerator implements LevelGenerator {
@@ -214,6 +215,12 @@ class MockLevelGenerator implements LevelGenerator {
       initialContainers: balancedContainers,
       tags: ['test'],
     );
+  }
+
+  @override
+  bool hasCompletedContainers(Level level) {
+    // For testing, delegate to LevelValidator
+    return LevelValidator.hasCompletedContainers(level);
   }
 }
 

@@ -399,4 +399,9 @@ class _ErrorLevelGenerator implements LevelGenerator {
   List<Level> generateLevelSeries(int startId, int count, {int startDifficulty = 1}) {
     throw Exception('Test error in level series generation');
   }
+
+  @override
+  bool hasCompletedContainers(Level level) {
+    return false;
+  }
 }

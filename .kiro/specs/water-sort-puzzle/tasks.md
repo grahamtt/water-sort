@@ -69,7 +69,7 @@
   - Write integration tests for unique level generation workflow
   - _Requirements: 9.6, 9.7, 9.8_
 
-- [ ] 6.3 Implement completed container validation for level generation
+- [x] 6.3 Implement completed container validation for level generation
 
   - Create LevelValidator class with validateGeneratedLevel method
   - Implement \_hasCompletedContainers method to detect full single-color containers
@@ -79,7 +79,7 @@
   - Write comprehensive unit tests for completed container detection edge cases
   - _Requirements: 9.9, 9.10_
 
-- [ ] 6.4 Implement empty container optimization for level generation
+- [x] 6.4 Implement empty container optimization for level generation
 
   - Add optimizeEmptyContainers method to LevelValidator class
   - Implement empty container removal logic with solvability testing
@@ -89,7 +89,7 @@
   - Write unit tests for empty container optimization with various scenarios
   - _Requirements: 9.11, 9.12_
 
-- [ ] 6.5 Implement adjacent color layer merging for level generation
+- [x] 6.5 Implement adjacent color layer merging for level generation
 
   - Add mergeAdjacentLayers method to LevelValidator class
   - Implement logic to detect and merge consecutive liquid layers of the same color
@@ -98,6 +98,69 @@
   - Update level signature generation after layer merging optimization
   - Write comprehensive unit tests for layer merging with various container configurations
   - _Requirements: 9.13, 9.14_
+
+- [ ] 6.6 Implement trap move detection system
+
+  - Create TrapMoveAnalyzer class with identifyTrapMoves method
+  - Implement logic to detect moves that appear beneficial but lead to unsolvable states
+  - Add move simulation and solvability checking for trap detection
+  - Create TrapMove and TrapType classes with intuition scoring
+  - Implement trap move classification (color lock, space waste, color burial, sequence break)
+  - Write comprehensive unit tests for trap move detection with various puzzle scenarios
+  - _Requirements: 5.3 (difficulty progression)_
+
+- [ ] 6.7 Implement planning depth analysis system
+
+  - Create PlanningDepthAnalyzer class with calculateRequiredPlanningDepth method
+  - Implement shortest solution path finding algorithm
+  - Add CriticalDecision detection for points where most moves lead to dead ends
+  - Create difficulty ratio calculation for critical decision points
+  - Implement solution path analysis with step-by-step state tracking
+  - Write unit tests for planning depth analysis with various complexity levels
+  - _Requirements: 5.3 (difficulty progression)_
+
+- [ ] 6.8 Implement color complexity analysis system
+
+  - Create ColorComplexityAnalyzer class with analyzeColorDistribution method
+  - Implement color fragmentation calculation (how scattered colors are across containers)
+  - Add layer depth variance analysis (how deeply colors are buried)
+  - Create color interleaving measurement (alternating pattern detection)
+  - Implement dominant color balance analysis (volume distribution)
+  - Add ColorComplexity class with overall complexity scoring
+  - Write unit tests for color complexity analysis with various distribution patterns
+  - _Requirements: 5.3 (difficulty progression)_
+
+- [ ] 6.9 Implement space management analysis system
+
+  - Create SpaceManagementAnalyzer class with analyzeSpaceRequirements method
+  - Implement critical space point detection throughout solution path
+  - Add temporary space needs calculation for intermediate solving steps
+  - Create SpaceEfficiency and SpaceConstraint classes with constraint severity scoring
+  - Implement space utilization and capacity analysis
+  - Write unit tests for space management analysis with various container configurations
+  - _Requirements: 5.3 (difficulty progression)_
+
+- [ ] 6.10 Implement comprehensive difficulty scoring system
+
+  - Create DifficultyAnalyzer class with analyzeLevelDifficulty method
+  - Implement weighted difficulty scoring combining all analysis factors
+  - Add DifficultyScore class with individual component scores and overall difficulty
+  - Create DifficultyLevel enum and classification logic (trivial to expert)
+  - Implement DifficultyFactor identification for primary challenge sources
+  - Add difficulty score validation and normalization
+  - Write comprehensive unit tests for difficulty scoring with known difficulty levels
+  - _Requirements: 5.3 (difficulty progression)_
+
+- [ ] 6.11 Integrate difficulty-aware level generation
+
+  - Create DifficultyAwareLevelGenerator abstract class extending LevelGenerator
+  - Implement generateLevelWithTargetDifficulty method with difficulty targeting
+  - Add difficulty validation with tolerance checking for generated levels
+  - Integrate difficulty analysis into existing level generation workflow
+  - Create difficulty-based level generation retry logic when targets aren't met
+  - Update LevelGenerationService to support difficulty-targeted generation
+  - Write integration tests for difficulty-aware level generation with various targets
+  - _Requirements: 5.3 (difficulty progression)_
 
 - [x] 7. Build persistence layer with Hive and SharedPreferences
 

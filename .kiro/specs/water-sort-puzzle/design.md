@@ -1078,3 +1078,524 @@ class ErrorHandler {
 - Efficient bitmap handling for liquid textures
 - Proper cleanup of animation resources
 - Background thread processing for level generation
+
+## Difficulty Analysis and Level Design
+
+**Core Difficulty Mechanics**
+
+The difficulty of a water sort puzzle is determined by several interconnected factors that affect the cognitive load and strategic planning required from players. Understanding these mechanics is crucial for generating levels that provide appropriate challenge progression.
+
+**1. Trap Moves and Dead-End States**
+
+The most sophisticated difficulty mechanic involves creating situations where the most obvious or intuitive move leads to an unsolvable state. This forces players to think beyond immediate gratification and consider long-term consequences.
+
+```dart
+class TrapMoveAnalyzer {
+  /// Identifies moves that appear beneficial but lead to dead ends
+  static List<TrapMove> identifyTrapMoves(Level level) {
+    final allMoves = MoveValidator.getAllValidMoves(level.initialState);
+    final trapMoves = <TrapMove>[];
+
+    for (final move in allMoves) {
+      final resultState = _simulateMove(level.initialState, move);
+
+      // Check if this move appears beneficial (consolidates colors, empties containers)
+      if (_appearsIntuitivelyGood(move, level.initialState)) {
+        // But actually makes the puzzle unsolvable
+        if (!_isSolvableFromState(resultState)) {
+          trapMoves.add(TrapMove(
+            move: move,
+            trapType: _classifyTrapType(move, level.initialState, resultState),
+            intuitionScore: _calculateIntuitionScore(move, level.initialState),
+          ));
+        }
+      }
+    }
+
+    return trapMoves;
+  }
+
+  static bool _appearsIntuitivelyGood(ValidMove move, List<Container> state) {
+    // Moves that appear good:
+    // - Consolidate same colors
+    // - Empty a container completely
+    // - Move to an empty container
+    // - Create a single-color container
+    return _consolidatesSameColor(move, state) ||
+           _emptiesSourceContainer(move, state) ||
+           _movesToEmptyContainer(move, state) ||
+           _createsSingleColorContainer(move, state);
+  }
+
+  static TrapType _classifyTrapType(ValidMove move, List<Container> before, List<Container> after) {
+    if (_createsColorLock(before, after)) return TrapType.colorLock;
+    if (_wastesEmptySpace(before, after)) return TrapType.spaceWaste;
+    if (_createsInaccessibleColor(before, after)) return TrapType.colorBurial;
+    if (_breaksRequiredSequence(before, after)) return TrapType.sequenceBreak;
+    return TrapType.general;
+  }
+}
+
+enum TrapType {
+  colorLock,    // Creates a situation where colors can't be separated
+  spaceWaste,   // Wastes limited empty container space
+  colorBurial,  // Buries a color that will be needed later
+  sequenceBreak, // Breaks a required move sequence
+  general       // Other trap scenarios
+}
+
+class TrapMove {
+  final ValidMove move;
+  final TrapType trapType;
+  final double intuitionScore; // How intuitive/obvious the move appears (0-1)
+
+  TrapMove({
+    required this.move,
+    required this.trapType,
+    required this.intuitionScore,
+  });
+}
+```
+
+**2. Planning Depth Requirements**
+
+Difficulty increases with the number of moves players must plan ahead to avoid dead ends or find the optimal solution path.
+
+```dart
+class PlanningDepthAnalyzer {
+  /// Calculates the minimum planning depth required to solve the level
+  static int calculateRequiredPlanningDepth(Level level) {
+    return _findShortestSolutionPath(level.initialState).length;
+  }
+
+  /// Identifies critical decision points where wrong choices lead to dead ends
+  static List<CriticalDecision> findCriticalDecisions(Level level) {
+    final solutionPath = _findShortestSolutionPath(level.initialState);
+    final criticalDecisions = <CriticalDecision>[];
+
+    for (int i = 0; i < solutionPath.length; i++) {
+      final currentState = _getStateAtStep(level.initialState, solutionPath, i);
+      final validMoves = MoveValidator.getAllValidMoves(currentState);
+
+      // Count how many of the valid moves lead to dead ends
+      int deadEndMoves = 0;
+      for (final move in validMoves) {
+        final resultState = _simulateMove(currentState, move);
+        if (!_isSolvableFromState(resultState)) {
+          deadEndMoves++;
+        }
+      }
+
+      // If most moves lead to dead ends, this is a critical decision point
+      if (deadEndMoves > validMoves.length * 0.6) {
+        criticalDecisions.add(CriticalDecision(
+          stepIndex: i,
+          totalOptions: validMoves.length,
+          deadEndOptions: deadEndMoves,
+          correctMove: solutionPath[i],
+        ));
+      }
+    }
+
+    return criticalDecisions;
+  }
+}
+
+class CriticalDecision {
+  final int stepIndex;
+  final int totalOptions;
+  final int deadEndOptions;
+  final ValidMove correctMove;
+
+  CriticalDecision({
+    required this.stepIndex,
+    required this.totalOptions,
+    required this.deadEndOptions,
+    required this.correctMove,
+  });
+
+  double get difficultyRatio => deadEndOptions / totalOptions;
+}
+```
+
+**3. Color Distribution Complexity**
+
+The arrangement and mixing of colors significantly affects difficulty through pattern recognition and planning requirements.
+
+```dart
+class ColorComplexityAnalyzer {
+  /// Analyzes how colors are distributed and mixed in containers
+  static ColorComplexity analyzeColorDistribution(Level level) {
+    final containers = level.initialState;
+
+    return ColorComplexity(
+      colorFragmentation: _calculateColorFragmentation(containers),
+      layerDepthVariance: _calculateLayerDepthVariance(containers),
+      colorInterleaving: _calculateColorInterleaving(containers),
+      dominantColorBalance: _calculateDominantColorBalance(containers),
+    );
+  }
+
+  /// Measures how scattered each color is across containers
+  static double _calculateColorFragmentation(List<Container> containers) {
+    final colorDistribution = <LiquidColor, List<int>>{};
+
+    // Track which containers each color appears in
+    for (int i = 0; i < containers.length; i++) {
+      final container = containers[i];
+      final colorsInContainer = container.liquidLayers.map((l) => l.color).toSet();
+
+      for (final color in colorsInContainer) {
+        colorDistribution.putIfAbsent(color, () => []).add(i);
+      }
+    }
+
+    // Calculate average fragmentation (colors spread across multiple containers)
+    double totalFragmentation = 0;
+    for (final containerList in colorDistribution.values) {
+      totalFragmentation += containerList.length - 1; // -1 because 1 container = no fragmentation
+    }
+
+    return totalFragmentation / colorDistribution.length;
+  }
+
+  /// Measures how deeply colors are buried under other colors
+  static double _calculateLayerDepthVariance(List<Container> containers) {
+    final colorDepths = <LiquidColor, List<int>>{};
+
+    for (final container in containers) {
+      for (int depth = 0; depth < container.liquidLayers.length; depth++) {
+        final color = container.liquidLayers[depth].color;
+        colorDepths.putIfAbsent(color, () => []).add(depth);
+      }
+    }
+
+    // Calculate variance in depths for each color
+    double totalVariance = 0;
+    for (final depths in colorDepths.values) {
+      if (depths.length > 1) {
+        final mean = depths.reduce((a, b) => a + b) / depths.length;
+        final variance = depths.map((d) => pow(d - mean, 2)).reduce((a, b) => a + b) / depths.length;
+        totalVariance += variance;
+      }
+    }
+
+    return totalVariance / colorDepths.length;
+  }
+
+  /// Measures how colors are interleaved (alternating patterns)
+  static double _calculateColorInterleaving(List<Container> containers) {
+    double totalInterleaving = 0;
+    int containerCount = 0;
+
+    for (final container in containers) {
+      if (container.liquidLayers.length > 1) {
+        int colorChanges = 0;
+        for (int i = 1; i < container.liquidLayers.length; i++) {
+          if (container.liquidLayers[i].color != container.liquidLayers[i-1].color) {
+            colorChanges++;
+          }
+        }
+        totalInterleaving += colorChanges / (container.liquidLayers.length - 1);
+        containerCount++;
+      }
+    }
+
+    return containerCount > 0 ? totalInterleaving / containerCount : 0;
+  }
+
+  /// Measures how evenly colors are distributed by volume
+  static double _calculateDominantColorBalance(List<Container> containers) {
+    final colorVolumes = <LiquidColor, int>{};
+
+    for (final container in containers) {
+      for (final layer in container.liquidLayers) {
+        colorVolumes[layer.color] = (colorVolumes[layer.color] ?? 0) + layer.volume;
+      }
+    }
+
+    if (colorVolumes.isEmpty) return 0;
+
+    final volumes = colorVolumes.values.toList();
+    final maxVolume = volumes.reduce(math.max);
+    final minVolume = volumes.reduce(math.min);
+
+    // Return balance ratio (1.0 = perfectly balanced, 0.0 = completely unbalanced)
+    return maxVolume > 0 ? minVolume / maxVolume : 0;
+  }
+}
+
+class ColorComplexity {
+  final double colorFragmentation;    // How scattered colors are (0-1+)
+  final double layerDepthVariance;    // How varied color depths are (0-1+)
+  final double colorInterleaving;     // How alternated colors are (0-1)
+  final double dominantColorBalance;  // How balanced color volumes are (0-1)
+
+  ColorComplexity({
+    required this.colorFragmentation,
+    required this.layerDepthVariance,
+    required this.colorInterleaving,
+    required this.dominantColorBalance,
+  });
+
+  double get overallComplexity {
+    return (colorFragmentation * 0.3 +
+            layerDepthVariance * 0.3 +
+            colorInterleaving * 0.2 +
+            (1 - dominantColorBalance) * 0.2);
+  }
+}
+```
+
+**4. Container Utilization and Space Management**
+
+Difficulty increases when players must carefully manage limited empty space and container capacity.
+
+```dart
+class SpaceManagementAnalyzer {
+  /// Analyzes how efficiently space must be used to solve the level
+  static SpaceEfficiency analyzeSpaceRequirements(Level level) {
+    final containers = level.initialState;
+    final emptyContainers = containers.where((c) => c.liquidLayers.isEmpty).length;
+    final totalCapacity = containers.fold<int>(0, (sum, c) => sum + c.capacity);
+    final usedCapacity = containers.fold<int>(0, (sum, c) => sum + c.currentVolume);
+
+    return SpaceEfficiency(
+      emptyContainerRatio: emptyContainers / containers.length,
+      capacityUtilization: usedCapacity / totalCapacity,
+      criticalSpacePoints: _findCriticalSpacePoints(level),
+      temporarySpaceNeeded: _calculateTemporarySpaceNeeds(level),
+    );
+  }
+
+  /// Identifies points in the solution where space management is critical
+  static List<SpaceConstraint> _findCriticalSpacePoints(Level level) {
+    final solutionPath = _findShortestSolutionPath(level.initialState);
+    final constraints = <SpaceConstraint>[];
+
+    for (int i = 0; i < solutionPath.length; i++) {
+      final state = _getStateAtStep(level.initialState, solutionPath, i);
+      final emptySpace = _calculateAvailableSpace(state);
+      final requiredSpace = _calculateRequiredSpaceForRemainingSolution(state, solutionPath.sublist(i));
+
+      if (requiredSpace > emptySpace * 0.8) { // Using 80% of available space
+        constraints.add(SpaceConstraint(
+          stepIndex: i,
+          availableSpace: emptySpace,
+          requiredSpace: requiredSpace,
+          constraintSeverity: requiredSpace / emptySpace,
+        ));
+      }
+    }
+
+    return constraints;
+  }
+
+  /// Calculates how much temporary space is needed during solution
+  static int _calculateTemporarySpaceNeeds(Level level) {
+    final solutionPath = _findShortestSolutionPath(level.initialState);
+    int maxTemporarySpace = 0;
+
+    for (int i = 0; i < solutionPath.length; i++) {
+      final state = _getStateAtStep(level.initialState, solutionPath, i);
+      final temporarySpace = _calculateTemporarySpaceAtStep(state, solutionPath.sublist(i));
+      maxTemporarySpace = math.max(maxTemporarySpace, temporarySpace);
+    }
+
+    return maxTemporarySpace;
+  }
+}
+
+class SpaceEfficiency {
+  final double emptyContainerRatio;     // Ratio of empty to total containers
+  final double capacityUtilization;     // How full containers are overall
+  final List<SpaceConstraint> criticalSpacePoints; // Points where space is critical
+  final int temporarySpaceNeeded;       // Max temporary space needed during solution
+
+  SpaceEfficiency({
+    required this.emptyContainerRatio,
+    required this.capacityUtilization,
+    required this.criticalSpacePoints,
+    required this.temporarySpaceNeeded,
+  });
+
+  double get spaceComplexity {
+    final criticalPointsScore = criticalSpacePoints.length / 10.0; // Normalize
+    final utilizationScore = capacityUtilization;
+    final temporarySpaceScore = temporarySpaceNeeded / 20.0; // Normalize
+
+    return (criticalPointsScore * 0.4 + utilizationScore * 0.3 + temporarySpaceScore * 0.3)
+        .clamp(0.0, 1.0);
+  }
+}
+
+class SpaceConstraint {
+  final int stepIndex;
+  final int availableSpace;
+  final int requiredSpace;
+  final double constraintSeverity;
+
+  SpaceConstraint({
+    required this.stepIndex,
+    required this.availableSpace,
+    required this.requiredSpace,
+    required this.constraintSeverity,
+  });
+}
+```
+
+**5. Comprehensive Difficulty Scoring**
+
+```dart
+class DifficultyAnalyzer {
+  /// Calculates overall difficulty score for a level
+  static DifficultyScore analyzeLevelDifficulty(Level level) {
+    final trapMoves = TrapMoveAnalyzer.identifyTrapMoves(level);
+    final criticalDecisions = PlanningDepthAnalyzer.findCriticalDecisions(level);
+    final colorComplexity = ColorComplexityAnalyzer.analyzeColorDistribution(level);
+    final spaceEfficiency = SpaceManagementAnalyzer.analyzeSpaceRequirements(level);
+    final planningDepth = PlanningDepthAnalyzer.calculateRequiredPlanningDepth(level);
+
+    return DifficultyScore(
+      trapMoveScore: _calculateTrapMoveScore(trapMoves),
+      planningDepthScore: _calculatePlanningDepthScore(planningDepth, criticalDecisions),
+      colorComplexityScore: colorComplexity.overallComplexity,
+      spaceManagementScore: spaceEfficiency.spaceComplexity,
+      overallDifficulty: _calculateOverallDifficulty(trapMoves, criticalDecisions, colorComplexity, spaceEfficiency, planningDepth),
+      difficultyFactors: _identifyPrimaryDifficultyFactors(trapMoves, criticalDecisions, colorComplexity, spaceEfficiency),
+    );
+  }
+
+  static double _calculateTrapMoveScore(List<TrapMove> trapMoves) {
+    if (trapMoves.isEmpty) return 0.0;
+
+    // Weight by how intuitive the trap moves are
+    final weightedScore = trapMoves.fold<double>(0.0, (sum, trap) => sum + trap.intuitionScore);
+    return (weightedScore / trapMoves.length).clamp(0.0, 1.0);
+  }
+
+  static double _calculatePlanningDepthScore(int planningDepth, List<CriticalDecision> criticalDecisions) {
+    final depthScore = (planningDepth / 20.0).clamp(0.0, 1.0); // Normalize to 20 moves max
+    final criticalScore = criticalDecisions.isEmpty ? 0.0 :
+        criticalDecisions.map((d) => d.difficultyRatio).reduce((a, b) => a + b) / criticalDecisions.length;
+
+    return (depthScore * 0.6 + criticalScore * 0.4);
+  }
+
+  static double _calculateOverallDifficulty(
+    List<TrapMove> trapMoves,
+    List<CriticalDecision> criticalDecisions,
+    ColorComplexity colorComplexity,
+    SpaceEfficiency spaceEfficiency,
+    int planningDepth,
+  ) {
+    final trapScore = _calculateTrapMoveScore(trapMoves);
+    final planningScore = _calculatePlanningDepthScore(planningDepth, criticalDecisions);
+    final colorScore = colorComplexity.overallComplexity;
+    final spaceScore = spaceEfficiency.spaceComplexity;
+
+    // Weighted combination of all factors
+    return (trapScore * 0.35 +           // Trap moves are most important for difficulty
+            planningScore * 0.25 +       // Planning depth is second most important
+            colorScore * 0.25 +          // Color complexity affects pattern recognition
+            spaceScore * 0.15)           // Space management adds constraint pressure
+        .clamp(0.0, 1.0);
+  }
+
+  static List<DifficultyFactor> _identifyPrimaryDifficultyFactors(
+    List<TrapMove> trapMoves,
+    List<CriticalDecision> criticalDecisions,
+    ColorComplexity colorComplexity,
+    SpaceEfficiency spaceEfficiency,
+  ) {
+    final factors = <DifficultyFactor>[];
+
+    if (trapMoves.isNotEmpty) {
+      factors.add(DifficultyFactor.trapMoves);
+    }
+    if (criticalDecisions.length > 2) {
+      factors.add(DifficultyFactor.criticalDecisions);
+    }
+    if (colorComplexity.colorInterleaving > 0.6) {
+      factors.add(DifficultyFactor.colorInterleaving);
+    }
+    if (colorComplexity.colorFragmentation > 1.5) {
+      factors.add(DifficultyFactor.colorFragmentation);
+    }
+    if (spaceEfficiency.criticalSpacePoints.length > 1) {
+      factors.add(DifficultyFactor.spaceConstraints);
+    }
+
+    return factors;
+  }
+}
+
+class DifficultyScore {
+  final double trapMoveScore;         // 0-1, how many/obvious trap moves exist
+  final double planningDepthScore;    // 0-1, how much planning ahead is required
+  final double colorComplexityScore;  // 0-1, how complex color patterns are
+  final double spaceManagementScore;  // 0-1, how critical space management is
+  final double overallDifficulty;     // 0-1, weighted combination of all factors
+  final List<DifficultyFactor> difficultyFactors; // Primary sources of difficulty
+
+  DifficultyScore({
+    required this.trapMoveScore,
+    required this.planningDepthScore,
+    required this.colorComplexityScore,
+    required this.spaceManagementScore,
+    required this.overallDifficulty,
+    required this.difficultyFactors,
+  });
+
+  DifficultyLevel get difficultyLevel {
+    if (overallDifficulty < 0.2) return DifficultyLevel.trivial;
+    if (overallDifficulty < 0.4) return DifficultyLevel.easy;
+    if (overallDifficulty < 0.6) return DifficultyLevel.medium;
+    if (overallDifficulty < 0.8) return DifficultyLevel.hard;
+    return DifficultyLevel.expert;
+  }
+}
+
+enum DifficultyFactor {
+  trapMoves,
+  criticalDecisions,
+  colorInterleaving,
+  colorFragmentation,
+  spaceConstraints,
+}
+
+enum DifficultyLevel {
+  trivial,
+  easy,
+  medium,
+  hard,
+  expert,
+}
+```
+
+**Integration with Level Generation**
+
+```dart
+abstract class DifficultyAwareLevelGenerator extends LevelGenerator {
+  /// Generates a level targeting a specific difficulty score
+  Level generateLevelWithTargetDifficulty(
+    int colorCount,
+    int containerCount,
+    double targetDifficulty,
+    List<DifficultyFactor> desiredFactors,
+  );
+
+  /// Validates that generated level meets difficulty requirements
+  bool validateDifficultyRequirements(Level level, double targetDifficulty, double tolerance);
+}
+```
+
+This comprehensive difficulty analysis system provides:
+
+1. **Trap Move Detection** - Identifies moves that appear good but lead to dead ends
+2. **Planning Depth Analysis** - Measures how far ahead players must think
+3. **Color Complexity Scoring** - Quantifies pattern recognition challenges
+4. **Space Management Analysis** - Evaluates container utilization constraints
+5. **Comprehensive Scoring** - Combines all factors into actionable difficulty metrics
+
+The system can be used during level generation to ensure levels meet specific difficulty targets and provide the right type of challenge for different skill levels.

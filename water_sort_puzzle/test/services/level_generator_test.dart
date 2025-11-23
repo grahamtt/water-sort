@@ -46,9 +46,13 @@ void main() {
 
       expect(level.id, equals(1));
       expect(level.difficulty, equals(3));
-      expect(level.containerCount, equals(4));
       expect(level.colorCount, equals(2));
-      expect(level.initialContainers.length, equals(4));
+      
+      // After optimization, container count may be less than requested
+      // but should match the actual number of containers
+      expect(level.containerCount, equals(level.initialContainers.length));
+      expect(level.initialContainers.length, greaterThanOrEqualTo(3)); // At least 2 colors + 1 empty
+      expect(level.initialContainers.length, lessThanOrEqualTo(4)); // Not more than requested
     });
 
     test('should generate level with correct number of empty containers', () {
@@ -185,14 +189,16 @@ void main() {
     test('should handle edge cases in level generation', () {
       // Minimum viable level (need at least 2 containers for 1 color + 1 empty slot)
       final minLevel = generator.generateLevel(1, 1, 4, 2);
-      expect(minLevel.containerCount, equals(4));
       expect(minLevel.colorCount, equals(2));
+      expect(minLevel.containerCount, equals(minLevel.initialContainers.length));
+      expect(minLevel.initialContainers.length, greaterThanOrEqualTo(3)); // At least 2 colors + 1 empty
       expect(generator.validateLevel(minLevel), isTrue);
 
       // Complex level
       final complexLevel = generator.generateLevel(1, 10, 8, 6);
-      expect(complexLevel.containerCount, equals(8));
       expect(complexLevel.colorCount, equals(6));
+      expect(complexLevel.containerCount, equals(complexLevel.initialContainers.length));
+      expect(complexLevel.initialContainers.length, greaterThanOrEqualTo(7)); // At least 6 colors + 1 empty
       expect(generator.validateLevel(complexLevel), isTrue);
     });
 
@@ -209,5 +215,27 @@ void main() {
         );
       },
     );
+
+    test('should not generate levels with completed containers', () {
+      // Generate multiple levels to test consistency
+      for (int i = 0; i < 10; i++) {
+        final level = generator.generateLevel(i, 3, 4, 2);
+        
+        // Verify no completed containers exist
+        expect(generator.hasCompletedContainers(level), isFalse,
+            reason: 'Level $i should not have completed containers');
+        
+        // Double-check with direct validation
+        bool hasCompleted = false;
+        for (final container in level.initialContainers) {
+          if (!container.isEmpty && container.isFull && container.isSorted) {
+            hasCompleted = true;
+            break;
+          }
+        }
+        expect(hasCompleted, isFalse,
+            reason: 'Level $i has a completed container (full and single-color)');
+      }
+    });
   });
 }
