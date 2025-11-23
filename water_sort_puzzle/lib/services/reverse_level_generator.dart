@@ -89,12 +89,15 @@ class ReverseLevelGenerator implements LevelGenerator {
       if (validationFailures.isEmpty) {
         // Skip optimization for small capacities to avoid BFS solver issues
         // Optimize by removing unnecessary empty containers only for larger capacities
+        Level validatedLevel;
         if (containerCapacity >= 4) {
           final optimizedLevel = LevelValidator.optimizeEmptyContainers(level);
-          validLevel = optimizedLevel;
+          validatedLevel = optimizedLevel;
         } else {
-          validLevel = level;
+          validatedLevel = level;
         }
+        // Mark the level as validated
+        validLevel = validatedLevel.copyWith(isValidated: true);
         break;
       } else if (config.returnBest) {
         // Track the best candidate (fewest failures)
@@ -175,7 +178,7 @@ class ReverseLevelGenerator implements LevelGenerator {
       // Calculate colorCount based on difficulty
       // Ensure colorCount * containerCapacity > emptySlots for valid liquid volume
       final minColorCount = (emptySlots / containerCapacity).ceil() + 1;
-      final targetColorCount = LevelParameters.calculateColorCount(difficulty, minColorCount + 2);
+      final targetColorCount = LevelParameters.calculateColorCount(difficulty);
       final colorCount = targetColorCount.clamp(minColorCount, LiquidColor.values.length);
 
       final level = generateLevel(

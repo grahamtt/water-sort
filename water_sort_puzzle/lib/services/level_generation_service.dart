@@ -44,7 +44,6 @@ class LevelGenerationService {
   Future<Level> generateNextLevel(
     int levelId,
     int difficulty,
-    int containerCount,
     int colorCount,
     int containerCapacity,
   ) async {
@@ -81,7 +80,6 @@ class LevelGenerationService {
       uniqueLevel = await _handleUniquenessFailure(
         levelId,
         difficulty,
-        containerCount,
         colorCount,
         attempts,
       );
@@ -111,14 +109,12 @@ class LevelGenerationService {
       
       // Progressive difficulty scaling
       final difficulty = LevelParameters.calculateProgressiveDifficulty(i, startDifficulty);
-      final containerCount = _calculateContainerCount(difficulty, startContainerCount);
-      final colorCount = _calculateColorCount(difficulty, containerCount, startColorCount);
+      final colorCount = LevelParameters.calculateColorCount(difficulty).clamp(startColorCount, 10);
       final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
 
       final level = await generateNextLevel(
         levelId,
         difficulty,
-        containerCount,
         colorCount,
         containerCapacity,
       );
@@ -143,7 +139,6 @@ class LevelGenerationService {
   Future<Level> _handleUniquenessFailure(
     int levelId,
     int difficulty,
-    int containerCount,
     int colorCount,
     int attemptsMade,
   ) async {
@@ -175,7 +170,6 @@ class LevelGenerationService {
     final modifiedLevel = await _generateWithModifiedParameters(
       levelId,
       difficulty,
-      containerCount,
       colorCount,
     );
     
@@ -200,7 +194,7 @@ class LevelGenerationService {
       return fallbackLevel;
     } catch (e) {
       // If even the fallback fails, create a minimal valid level
-      return _createMinimalLevel(levelId, difficulty, containerCount, colorCount);
+      return _createMinimalLevel(levelId, difficulty, colorCount);
     }
   }
 
@@ -208,7 +202,6 @@ class LevelGenerationService {
   Future<Level?> _generateWithModifiedParameters(
     int levelId,
     int difficulty,
-    int containerCount,
     int colorCount,
   ) async {
     // Try variations in color count (container count is now derived from colorCount + emptySlots)
@@ -310,29 +303,6 @@ class LevelGenerationService {
   }
 
 
-  /// Calculate container count based on difficulty
-  int _calculateContainerCount(int difficulty, int baseContainerCount) {
-    // Increase containers as difficulty increases, but cap at reasonable limits
-    if (difficulty <= 2) return max(4, baseContainerCount);
-    if (difficulty <= 4) return max(5, baseContainerCount);
-    if (difficulty <= 6) return max(6, baseContainerCount);
-    if (difficulty <= 8) return max(7, baseContainerCount);
-    return max(8, baseContainerCount);
-  }
-
-  /// Calculate color count based on difficulty and container count
-  int _calculateColorCount(int difficulty, int containerCount, int baseColorCount) {
-    // Ensure we have at least one empty container for solving
-    final maxColors = containerCount - 1;
-    
-    if (difficulty <= 2) return min(max(2, baseColorCount), maxColors);
-    if (difficulty <= 4) return min(max(3, baseColorCount), maxColors);
-    if (difficulty <= 6) return min(max(4, baseColorCount), maxColors);
-    if (difficulty <= 8) return min(max(5, baseColorCount), maxColors);
-    return min(max(6, baseColorCount), maxColors);
-  }
-
-
   /// Validate that the service is working correctly
   bool validateService() {
     try {
@@ -356,10 +326,17 @@ class LevelGenerationService {
   }
 
   /// Create a minimal valid level as absolute fallback
-  Level _createMinimalLevel(int levelId, int difficulty, int containerCount, int colorCount) {
+  Level _createMinimalLevel(int levelId, int difficulty, int colorCount) {
     // Import required models
     final containers = <Container>[];
     final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
+    final emptySlots = LevelParameters.calculateEmptySlots(difficulty, containerCapacity);
+    
+    // Calculate containerCount from colorCount and emptySlots
+    final emptyContainerCount = emptySlots >= containerCapacity 
+        ? emptySlots ~/ containerCapacity 
+        : 0;
+    final containerCount = colorCount + emptyContainerCount;
     
     // Create containers - first few with simple liquid patterns, rest empty
     for (int i = 0; i < containerCount; i++) {

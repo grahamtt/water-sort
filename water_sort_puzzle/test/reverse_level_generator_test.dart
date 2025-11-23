@@ -42,6 +42,41 @@ void main() {
       expect(totalEmptySlots, greaterThanOrEqualTo(1));
     });
 
+    test('generates single-color tutorial level (1 color, capacity 2, 2 empty slots)', () {
+      // Tutorial case: colorCount=1, capacity=2, emptySlots=2
+      // Solved state should be: |AA| | (one full container, one empty)
+      // Scrambled state should be: |A|A| (split across two containers)
+      final level = generator.generateLevel(1, 1, 1, 2, 2);
+
+      expect(level.id, 1);
+      expect(level.difficulty, 1);
+      expect(level.colorCount, 1);
+      expect(level.containerCount, 2); // 1 color + ceil(2/2) = 1 + 1 = 2
+      
+      // Count colors present in the level
+      final colorCounts = <String, int>{};
+      for (final container in level.initialContainers) {
+        for (final layer in container.liquidLayers) {
+          final colorName = layer.color.name;
+          colorCounts[colorName] = (colorCounts[colorName] ?? 0) + layer.volume;
+        }
+      }
+      
+      // Only one color should be present
+      expect(colorCounts.length, 1, reason: 'Only one color should be present in tutorial level');
+      
+      // Total liquid should be 2 (1*2 capacity, 2 empty slots means full container)
+      final totalLiquid = colorCounts.values.fold(0, (sum, vol) => sum + vol);
+      expect(totalLiquid, 2);
+      
+      // Should have exactly 2 empty slots total
+      int totalEmptySlots = 0;
+      for (final container in level.initialContainers) {
+        totalEmptySlots += container.remainingCapacity;
+      }
+      expect(totalEmptySlots, 2);
+    });
+
     test('preserves all colors with small capacity (2 colors, capacity 2, 1 empty slot)', () {
       // This is the specific case reported by the user
       // colorCount=2, capacity=2, emptySlots=1
@@ -234,9 +269,11 @@ void main() {
 
     test('validates generated levels correctly', () {
       final level = generator.generateLevel(1, 3, 4, 4, 4);
-
-      // The generator's validate method should return true
+      
+      expect(level.isStructurallyValid, true);
       expect(generator.validateLevel(level), true);
+      // Validated levels should have isValidated flag set to true
+      expect(level.isValidated, true);
     });
 
     test('different seeds generate different levels', () {

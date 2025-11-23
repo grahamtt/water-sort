@@ -10,24 +10,24 @@ void main() {
     // Calculate parameters the same way GameStateProvider does
     final levelId = 1;
     final difficulty = LevelParameters.calculateDifficultyForLevel(levelId);
-    final containerCount = LevelParameters.calculateContainerCountForLevel(levelId);
     final colorCount = LevelParameters.calculateColorCountForLevel(levelId);
     final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
+    final emptySlots = LevelParameters.calculateEmptySlotsForLevel(levelId);
     
     print('Level 1 parameters:');
     print('  Difficulty: $difficulty');
-    print('  Container Count: $containerCount');
     print('  Color Count: $colorCount');
     print('  Container Capacity: $containerCapacity');
+    print('  Empty Slots: $emptySlots');
     
     final startTime = DateTime.now();
     try {
       final level = generator.generateLevel(
         levelId,
         difficulty,
-        containerCount,
         colorCount,
         containerCapacity,
+        emptySlots,
       );
       
       final elapsed = DateTime.now().difference(startTime);
@@ -65,18 +65,18 @@ void main() {
     
     for (int levelId = 1; levelId <= 5; levelId++) {
       final difficulty = LevelParameters.calculateDifficultyForLevel(levelId);
-      final containerCount = LevelParameters.calculateContainerCountForLevel(levelId);
       final colorCount = LevelParameters.calculateColorCountForLevel(levelId);
       final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
+      final emptySlots = LevelParameters.calculateEmptySlotsForLevel(levelId);
       
       final startTime = DateTime.now();
       try {
         final level = generator.generateLevel(
           levelId,
           difficulty,
-          containerCount,
           colorCount,
           containerCapacity,
+          emptySlots,
         );
         
         final elapsed = DateTime.now().difference(startTime);

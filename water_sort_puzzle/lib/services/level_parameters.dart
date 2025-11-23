@@ -16,45 +16,20 @@ class LevelParameters {
     return ((levelId - 1) ~/ 5) + 1;
   }
 
-  /// Calculate container count based on difficulty
-  /// Increases every 5 levels in lockstep with color count
-  static int calculateContainerCount(int difficulty) {
-    if (difficulty <= 2) return 4;
-    if (difficulty <= 4) return 5;
-    if (difficulty <= 6) return 6;
-    if (difficulty <= 8) return 7;
-    return 8;
-  }
-
-  /// Calculate container count for a specific level ID
-  static int calculateContainerCountForLevel(int levelId) {
-    final difficulty = calculateDifficultyForLevel(levelId);
-    return calculateContainerCount(difficulty);
-  }
-
-  /// Calculate color count based on difficulty and container count
-  /// Ensures at least one empty container for solving
-  static int calculateColorCount(int difficulty, int containerCount) {
-    final maxColors = containerCount - 1;
-
-    if (difficulty <= 2) return min(2, maxColors);
-    if (difficulty <= 4) return min(3, maxColors);
-    if (difficulty <= 6) return min(4, maxColors);
-    if (difficulty <= 8) return min(5, maxColors);
-    return min(6, maxColors);
+  /// Calculate color count based on difficulty
+  /// Color count increases with difficulty
+  static int calculateColorCount(int difficulty) {
+    if (difficulty <= 2) return 2;
+    if (difficulty <= 4) return 3;
+    if (difficulty <= 6) return 4;
+    if (difficulty <= 8) return 5;
+    return 6;
   }
 
   /// Calculate color count for a specific level ID
   static int calculateColorCountForLevel(int levelId) {
     final difficulty = calculateDifficultyForLevel(levelId);
-    final containerCount = calculateContainerCountForLevel(levelId);
-    final maxColors = containerCount - 1;
-
-    if (difficulty <= 2) return 2.clamp(2, maxColors);
-    if (difficulty <= 4) return 3.clamp(2, maxColors);
-    if (difficulty <= 6) return 4.clamp(2, maxColors);
-    if (difficulty <= 8) return 5.clamp(2, maxColors);
-    return 6.clamp(2, maxColors);
+    return calculateColorCount(difficulty);
   }
 
   /// Calculate container capacity based on level ID

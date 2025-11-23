@@ -56,12 +56,12 @@ class _TestLevelGeneratorScreenState extends State<TestLevelGeneratorScreen> {
 
     try {
       // Validate parameters
-      if (_colorCount < 2) {
-        throw ArgumentError('Color count must be at least 2');
+      if (_colorCount < 1) {
+        throw ArgumentError('Color count must be at least 1 (for tutorial levels)');
       }
       
-      if (_containerCount < 3) {
-        throw ArgumentError('Container count must be at least 3 (calculated from colorCount + ceil(emptySlots/capacity))');
+      if (_containerCount < 2) {
+        throw ArgumentError('Container count must be at least 2 (calculated from colorCount + ceil(emptySlots/capacity))');
       }
       
       if (_containerCapacity < 2) {
@@ -208,12 +208,12 @@ class _TestLevelGeneratorScreenState extends State<TestLevelGeneratorScreen> {
             _buildParameterCard(
               title: 'Color Count',
               value: _colorCount,
-              min: 2,
+              min: 1,
               max: 10,
-              divisions: 8,
+              divisions: 9,
               onChanged: (value) => setState(() => _colorCount = value.toInt()),
-              description: 'Number of different colors (containers = colors + ceil(emptySlots/capacity))',
-              recommendedValue: LevelParameters.calculateColorCount(_difficulty, _containerCount),
+              description: 'Number of different colors (1 for tutorial, containers = colors + ceil(emptySlots/capacity))',
+              recommendedValue: LevelParameters.calculateColorCount(_difficulty),
             ),
 
             // Container capacity slider

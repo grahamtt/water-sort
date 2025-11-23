@@ -201,7 +201,9 @@ class WaterSortLevelGenerator implements LevelGenerator {
           // First merge adjacent layers of the same color
           var optimizedLevel = LevelValidator.mergeAdjacentLayers(level);
           // Then optimize empty containers
-          validLevel = LevelValidator.optimizeEmptyContainers(optimizedLevel);
+          var finalLevel = LevelValidator.optimizeEmptyContainers(optimizedLevel);
+          // Mark the level as validated
+          validLevel = finalLevel.copyWith(isValidated: true);
         } else if (config.returnBest) {
           // Track the best candidate (fewest failures)
           if (bestCandidate == null || validationResult.failures.length < bestCandidateFailures.length) {
@@ -329,9 +331,8 @@ class WaterSortLevelGenerator implements LevelGenerator {
       final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
       final emptySlots = LevelParameters.calculateEmptySlots(difficulty, containerCapacity);
       
-      // Calculate containerCount from emptySlots to determine colorCount
-      final containerCount = (emptySlots / containerCapacity).ceil() + 2; // Minimum 2 colors
-      final colorCount = LevelParameters.calculateColorCount(difficulty, containerCount);
+      // Calculate colorCount based on difficulty
+      final colorCount = LevelParameters.calculateColorCount(difficulty);
 
       final level = generateLevel(
         levelId,
