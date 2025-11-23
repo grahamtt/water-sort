@@ -43,7 +43,11 @@ class ReverseLevelGenerator implements LevelGenerator {
     }
 
     // Try generating a valid level with retries
+    Level? validLevel;
+    Level? bestCandidate;
+    int bestCandidateFailureCount = 999;
     const maxAttempts = 10;
+    
     for (int attempt = 0; attempt < maxAttempts; attempt++) {
       // Select colors for this level
       final selectedColors = _selectColors(colorCount);
@@ -74,16 +78,38 @@ class ReverseLevelGenerator implements LevelGenerator {
       );
 
       // Validate the level meets all requirements
-      if (LevelValidator.validateGeneratedLevel(level)) {
+      final validationFailures = _validateWithDetails(level);
+      
+      if (validationFailures.isEmpty) {
         // Skip optimization for small capacities to avoid BFS solver issues
         // Optimize by removing unnecessary empty containers only for larger capacities
         if (containerCapacity >= 4) {
           final optimizedLevel = LevelValidator.optimizeEmptyContainers(level);
-          return optimizedLevel;
+          validLevel = optimizedLevel;
+        } else {
+          validLevel = level;
         }
-        
-        return level;
+        break;
+      } else if (config.returnBest) {
+        // Track the best candidate (fewest failures)
+        if (validationFailures.length < bestCandidateFailureCount) {
+          bestCandidate = level;
+          bestCandidateFailureCount = validationFailures.length;
+        }
       }
+    }
+
+    // If we found a valid level, return it
+    if (validLevel != null) {
+      return validLevel;
+    }
+
+    // If returnBest is enabled and we have a candidate, return it with failure metadata
+    if (config.returnBest && bestCandidate != null) {
+      final failureTags = _getValidationFailureTags(bestCandidate);
+      return bestCandidate.copyWith(
+        tags: [...bestCandidate.tags, ...failureTags, 'best_invalid_candidate'],
+      );
     }
 
     // If we couldn't generate a valid level after max attempts, throw an error
@@ -645,6 +671,52 @@ class ReverseLevelGenerator implements LevelGenerator {
     }
 
     return tags;
+  }
+
+  /// Validate a level and return list of validation failure reasons
+  List<String> _validateWithDetails(Level level) {
+    final failures = <String>[];
+
+    // Check if level is already solved
+    if (!LevelValidator.validateGeneratedLevel(level)) {
+      // Get specific failure reasons
+      bool hasAnyLiquid = false;
+      bool allSortedAndFull = true;
+      
+      for (final container in level.initialContainers) {
+        if (container.isEmpty) continue;
+        hasAnyLiquid = true;
+        if (!container.isSorted || !container.isFull) {
+          allSortedAndFull = false;
+          break;
+        }
+      }
+      
+      if (hasAnyLiquid && allSortedAndFull) {
+        failures.add('already_solved');
+      }
+
+      // Check for completed containers
+      for (final container in level.initialContainers) {
+        if (!container.isEmpty && container.isSorted && container.isFull) {
+          failures.add('has_completed_container');
+          break;
+        }
+      }
+
+      // Check structural validity
+      if (!level.isStructurallyValid) {
+        failures.add('not_structurally_valid');
+      }
+    }
+
+    return failures;
+  }
+
+  /// Get validation failure tags for a level
+  List<String> _getValidationFailureTags(Level level) {
+    final failures = _validateWithDetails(level);
+    return failures.map((f) => 'validation_failed:$f').toList();
   }
 }
 

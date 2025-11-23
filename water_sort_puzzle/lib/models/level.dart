@@ -159,12 +159,6 @@ class Level {
       }
     }
     
-    // Assume standard container capacity for validation
-    const standardCapacity = 4;
-    for (final volume in colorVolumes.values) {
-      if (volume < standardCapacity) return false;
-    }
-    
     return true;
   }
   

@@ -315,7 +315,9 @@ class _TestLevelGeneratorScreenState extends State<TestLevelGeneratorScreen> {
             if (_generatedLevel != null) ...[
               const SizedBox(height: 16),
               Card(
-                color: Colors.green[50],
+                color: _generatedLevel!.tags.contains('best_invalid_candidate') 
+                    ? Colors.orange[50] 
+                    : Colors.green[50],
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
@@ -323,13 +325,26 @@ class _TestLevelGeneratorScreenState extends State<TestLevelGeneratorScreen> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.check_circle, color: Colors.green),
+                          Icon(
+                            _generatedLevel!.tags.contains('best_invalid_candidate')
+                                ? Icons.warning
+                                : Icons.check_circle,
+                            color: _generatedLevel!.tags.contains('best_invalid_candidate')
+                                ? Colors.orange
+                                : Colors.green,
+                          ),
                           const SizedBox(width: 8),
-                          Text(
-                            'Level Generated Successfully',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: Colors.green[900],
-                                ),
+                          Expanded(
+                            child: Text(
+                              _generatedLevel!.tags.contains('best_invalid_candidate')
+                                  ? 'Best Invalid Candidate Generated'
+                                  : 'Level Generated Successfully',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: _generatedLevel!.tags.contains('best_invalid_candidate')
+                                        ? Colors.orange[900]
+                                        : Colors.green[900],
+                                  ),
+                            ),
                           ),
                         ],
                       ),
@@ -341,6 +356,40 @@ class _TestLevelGeneratorScreenState extends State<TestLevelGeneratorScreen> {
                       _buildLevelStat('Filled Containers', '${_generatedLevel!.filledContainerCount}'),
                       _buildLevelStat('Complexity Score', _generatedLevel!.complexityScore.toStringAsFixed(1)),
                       _buildLevelStat('Validated', _generatedLevel!.isValidated ? 'Yes' : 'No'),
+                      
+                      // Show validation failures if present
+                      if (_generatedLevel!.tags.contains('best_invalid_candidate')) ...[
+                        const SizedBox(height: 16),
+                        const Divider(),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(Icons.warning, color: Colors.orange, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'VALIDATION FAILURES:',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange[900],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ..._generatedLevel!.tags
+                            .where((tag) => tag.startsWith('validation_failed:'))
+                            .map((tag) => Padding(
+                                  padding: const EdgeInsets.only(left: 28, top: 4),
+                                  child: Text(
+                                    '• ${tag.replaceFirst('validation_failed:', '').replaceAll('_', ' ')}',
+                                    style: TextStyle(
+                                      color: Colors.orange[800],
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                )),
+                      ],
+                      
                       const SizedBox(height: 16),
                       ElevatedButton.icon(
                         onPressed: _playLevel,
