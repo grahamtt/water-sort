@@ -57,12 +57,13 @@ class LevelGenerationService {
 
       try {
         // Generate a candidate level
+        final emptySlots = LevelParameters.calculateEmptySlots(difficulty, containerCapacity);
         final candidate = _generator.generateLevel(
           levelId,
           difficulty,
-          containerCount,
           colorCount,
           containerCapacity,
+          emptySlots,
         );
 
         // Check if it's sufficiently different from session levels
@@ -153,12 +154,13 @@ class LevelGenerationService {
       // Try one more time with reduced history
       try {
         final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
+        final emptySlots = LevelParameters.calculateEmptySlots(difficulty, containerCapacity);
         final candidate = _generator.generateLevel(
           levelId,
           difficulty,
-          containerCount,
           colorCount,
           containerCapacity,
+          emptySlots,
         );
         
         if (_isLevelUniqueInSession(candidate)) {
@@ -187,12 +189,13 @@ class LevelGenerationService {
     // Final fallback: generate a regular level without uniqueness constraints
     try {
       final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
+      final emptySlots = LevelParameters.calculateEmptySlots(difficulty, containerCapacity);
       final fallbackLevel = _generator.generateLevel(
         levelId,
         difficulty,
-        containerCount,
         colorCount,
         containerCapacity,
+        emptySlots,
       );
       return fallbackLevel;
     } catch (e) {
@@ -208,25 +211,24 @@ class LevelGenerationService {
     int containerCount,
     int colorCount,
   ) async {
+    // Try variations in color count (container count is now derived from colorCount + emptySlots)
     final variations = [
-      // Try with one more container if possible
-      if (containerCount < 8) (containerCount + 1, colorCount),
-      // Try with one less container if possible
-      if (containerCount > 4) (containerCount - 1, max(2, colorCount - 1)),
-      // Try with different color count
-      if (colorCount < containerCount - 1) (containerCount, colorCount + 1),
-      if (colorCount > 2) (containerCount, colorCount - 1),
+      // Try with one more color
+      if (colorCount < 10) colorCount + 1,
+      // Try with one less color
+      if (colorCount > 2) colorCount - 1,
     ];
 
-    for (final (newContainerCount, newColorCount) in variations) {
+    for (final newColorCount in variations) {
       try {
         final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
+        final emptySlots = LevelParameters.calculateEmptySlots(difficulty, containerCapacity);
         final candidate = _generator.generateLevel(
           levelId,
           difficulty,
-          newContainerCount,
           newColorCount,
           containerCapacity,
+          emptySlots,
         );
         
         if (_isLevelUniqueInSession(candidate)) {
@@ -335,7 +337,7 @@ class LevelGenerationService {
   bool validateService() {
     try {
       // Test basic generation
-      final testLevel = _generator.generateLevel(999, 1, 4, 2, 4);
+      final testLevel = _generator.generateLevel(999, 1, 2, 4, 8);
       if (testLevel.id != 999) return false;
 
       // Test uniqueness checking

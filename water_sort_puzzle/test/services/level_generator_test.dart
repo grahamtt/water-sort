@@ -44,7 +44,7 @@ void main() {
     });
 
     test('should generate valid level with basic parameters', () {
-      final level = generator.generateLevel(1, 3, 4, 2, 4);
+      final level = generator.generateLevel(1, 3, 2, 4, 8);
 
       expect(level.id, equals(1));
       expect(level.difficulty, equals(3));
@@ -58,7 +58,7 @@ void main() {
     });
 
     test('should generate level with correct number of empty containers', () {
-      final level = generator.generateLevel(1, 1, 5, 2, 4); // Easy level
+      final level = generator.generateLevel(1, 1, 2, 4, 8); // Easy level
 
       // Easy levels should have more empty containers
       final emptyCount = level.emptyContainerCount;
@@ -67,8 +67,8 @@ void main() {
     });
 
     test('should generate level with appropriate tags', () {
-      final tutorialLevel = generator.generateLevel(1, 1, 4, 2, 4);
-      final challengeLevel = generator.generateLevel(50, 9, 6, 4, 9);
+      final tutorialLevel = generator.generateLevel(1, 1, 2, 4, 8);
+      final challengeLevel = generator.generateLevel(50, 9, 4, 9, 9);
 
       expect(tutorialLevel.tags, contains('tutorial'));
       expect(tutorialLevel.tags, contains('easy'));
@@ -78,15 +78,15 @@ void main() {
     });
 
     test('should throw error for invalid parameters', () {
-      // Too few containers for colors + empty slots
-      expect(() => generator.generateLevel(1, 3, 3, 3, 4), throwsArgumentError);
-
       // Too many colors
-      expect(() => generator.generateLevel(1, 3, 10, 20, 4), throwsArgumentError);
+      expect(() => generator.generateLevel(1, 3, 20, 4, 8), throwsArgumentError);
+
+      // Invalid empty slots
+      expect(() => generator.generateLevel(1, 3, 2, 4, 0), throwsArgumentError);
     });
 
     test('should generate containers with correct liquid distribution', () {
-      final level = generator.generateLevel(1, 3, 5, 3, 4);
+      final level = generator.generateLevel(1, 3, 3, 4, 8);
 
       // Count liquid volumes by color
       final colorVolumes = <LiquidColor, int>{};
@@ -106,7 +106,7 @@ void main() {
     });
 
     test('should validate generated levels', () {
-      final level = generator.generateLevel(1, 3, 5, 3, 4);
+      final level = generator.generateLevel(1, 3, 3, 4, 8);
 
       expect(generator.validateLevel(level), isTrue);
       expect(level.isStructurallyValid, isTrue);
@@ -137,8 +137,8 @@ void main() {
         config: const LevelGenerationConfig(seed: 456),
       );
 
-      final level1 = generator1.generateLevel(1, 3, 4, 2, 4);
-      final level2 = generator2.generateLevel(1, 3, 4, 2, 4);
+      final level1 = generator1.generateLevel(1, 3, 2, 4, 8);
+      final level2 = generator2.generateLevel(1, 3, 2, 4, 8);
 
       // Levels should be different (very unlikely to be identical with different seeds)
       expect(level1.initialContainers, isNot(equals(level2.initialContainers)));
@@ -152,8 +152,8 @@ void main() {
         config: const LevelGenerationConfig(seed: 789),
       );
 
-      final level1 = generator1.generateLevel(1, 3, 4, 2, 4);
-      final level2 = generator2.generateLevel(1, 3, 4, 2, 4);
+      final level1 = generator1.generateLevel(1, 3, 2, 4, 8);
+      final level2 = generator2.generateLevel(1, 3, 2, 4, 8);
 
       // Levels should be identical with same seed
       expect(level1.initialContainers, equals(level2.initialContainers));
@@ -190,14 +190,14 @@ void main() {
 
     test('should handle edge cases in level generation', () {
       // Minimum viable level (need at least 2 containers for 1 color + 1 empty slot)
-      final minLevel = generator.generateLevel(1, 1, 4, 2, 4);
+      final minLevel = generator.generateLevel(1, 1, 2, 4, 8);
       expect(minLevel.colorCount, equals(2));
       expect(minLevel.containerCount, equals(minLevel.initialContainers.length));
       expect(minLevel.initialContainers.length, greaterThanOrEqualTo(3)); // At least 2 colors + 1 empty
       expect(generator.validateLevel(minLevel), isTrue);
 
       // Complex level
-      final complexLevel = generator.generateLevel(1, 10, 8, 6, 4);
+      final complexLevel = generator.generateLevel(1, 10, 6, 4, 4);
       expect(complexLevel.colorCount, equals(6));
       expect(complexLevel.containerCount, equals(complexLevel.initialContainers.length));
       expect(complexLevel.initialContainers.length, greaterThanOrEqualTo(7)); // At least 6 colors + 1 empty
@@ -207,8 +207,8 @@ void main() {
     test(
       'should generate levels with appropriate complexity for difficulty',
       () {
-        final easyLevel = generator.generateLevel(1, 1, 4, 2, 4);
-        final hardLevel = generator.generateLevel(1, 10, 8, 6, 4);
+        final easyLevel = generator.generateLevel(1, 1, 2, 4, 8);
+        final hardLevel = generator.generateLevel(1, 10, 6, 4, 4);
 
         expect(easyLevel.complexityScore, lessThan(hardLevel.complexityScore));
         expect(
@@ -221,7 +221,7 @@ void main() {
     test('should not generate levels with completed containers', () {
       // Generate multiple levels to test consistency
       for (int i = 0; i < 10; i++) {
-        final level = generator.generateLevel(i, 3, 4, 2, 4);
+        final level = generator.generateLevel(i, 3, 2, 4, 8);
         
         // Verify no completed containers exist
         expect(generator.hasCompletedContainers(level), isFalse,

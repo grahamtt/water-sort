@@ -64,10 +64,10 @@ class LevelParameters {
   /// Note: Capacities below 4 cause issues with the reverse level generator
   /// producing valid, solvable puzzles that pass validation
   static int calculateContainerCapacity(int levelId) {
-    if (levelId <= 12) return 4;
-    if (levelId <= 22) return 5;
-    if (levelId <= 32) return 6;
-    if (levelId <= 42) return 7;
+    if (levelId <= 15) return 4;
+    if (levelId <= 25) return 5;
+    if (levelId <= 35) return 6;
+    if (levelId <= 45) return 7;
     return 8;
   }
 
@@ -76,5 +76,28 @@ class LevelParameters {
   static int calculateContainerCapacityForSeries(int startId, int levelIndex) {
     final levelId = startId + levelIndex;
     return calculateContainerCapacity(levelId);
+  }
+
+  /// Calculate the number of empty slots based on difficulty and container capacity
+  /// Returns the total number of empty slots needed for the level
+  /// Easy levels have more empty slots, hard levels have fewer
+  static int calculateEmptySlots(int difficulty, int containerCapacity) {
+    if (difficulty <= 3) {
+      // Easy levels: 2 full containers worth of empty slots
+      return containerCapacity * 2;
+    } else if (difficulty <= 6) {
+      // Medium levels: 1.5 containers worth of empty slots
+      return (containerCapacity * 1.5).round();
+    } else {
+      // Hard levels: 1 container worth of empty slots
+      return containerCapacity;
+    }
+  }
+
+  /// Calculate empty slots for a specific level ID
+  static int calculateEmptySlotsForLevel(int levelId) {
+    final difficulty = calculateDifficultyForLevel(levelId);
+    final containerCapacity = calculateContainerCapacity(levelId);
+    return calculateEmptySlots(difficulty, containerCapacity);
   }
 }

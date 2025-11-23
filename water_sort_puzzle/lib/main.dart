@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'screens/game_screen.dart';
 import 'screens/level_selection_screen.dart';
+import 'screens/test_level_generator_screen.dart';
 import 'widgets/game_state_example.dart';
 import 'services/audio_manager.dart';
 
@@ -80,6 +81,20 @@ class MainMenu extends StatelessWidget {
                 );
               },
               child: const Text('Game State Provider Demo'),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const TestLevelGeneratorScreen()),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Test Level Generator'),
             ),
           ],
         ),

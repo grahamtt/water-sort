@@ -86,11 +86,11 @@ class GameStateProvider extends ChangeNotifier {
       // Generate level containers
       // Calculate difficulty and parameters based on level ID
       final difficulty = LevelParameters.calculateDifficultyForLevel(levelId);
-      final containerCount = LevelParameters.calculateContainerCountForLevel(levelId);
       final colorCount = LevelParameters.calculateColorCountForLevel(levelId);
       final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
+      final emptySlots = LevelParameters.calculateEmptySlotsForLevel(levelId);
       
-      final level = _levelGenerator.generateLevel(levelId, difficulty, containerCount, colorCount, containerCapacity);
+      final level = _levelGenerator.generateLevel(levelId, difficulty, colorCount, containerCapacity, emptySlots);
       
       // Initialize game state
       _currentGameState = _gameEngine.initializeLevel(levelId, level.initialContainers);

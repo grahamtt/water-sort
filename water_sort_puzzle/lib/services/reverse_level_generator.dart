@@ -21,10 +21,13 @@ class ReverseLevelGenerator implements LevelGenerator {
   Level generateLevel(
     int levelId,
     int difficulty,
-    int containerCount,
     int colorCount,
     int containerCapacity,
+    int emptySlots,
   ) {
+    // Calculate container count: colorCount + ceil(emptySlots / containerCapacity)
+    final containerCount = colorCount + (emptySlots / containerCapacity).ceil();
+
     // Validate input parameters
     if (colorCount > LiquidColor.values.length) {
       throw ArgumentError(
@@ -32,10 +35,10 @@ class ReverseLevelGenerator implements LevelGenerator {
       );
     }
 
-    // Check if we have enough containers for the colors
-    if (containerCount < colorCount) {
+    // Validate emptySlots
+    if (emptySlots < 1) {
       throw ArgumentError(
-        'Container count ($containerCount) must be at least equal to color count ($colorCount)',
+        'Empty slots ($emptySlots) must be at least 1',
       );
     }
 
@@ -50,6 +53,7 @@ class ReverseLevelGenerator implements LevelGenerator {
         containerCount,
         selectedColors,
         containerCapacity,
+        emptySlots,
       );
 
       // Scramble the solved state using inverse operations
@@ -93,14 +97,14 @@ class ReverseLevelGenerator implements LevelGenerator {
   Level generateUniqueLevel(
     int levelId,
     int difficulty,
-    int containerCount,
     int colorCount,
     int containerCapacity,
+    int emptySlots,
     List<Level> existingLevels,
   ) {
     // For now, just generate a level
     // TODO: Add uniqueness checking
-    return generateLevel(levelId, difficulty, containerCount, colorCount, containerCapacity);
+    return generateLevel(levelId, difficulty, colorCount, containerCapacity, emptySlots);
   }
 
   @override
@@ -133,16 +137,19 @@ class ReverseLevelGenerator implements LevelGenerator {
     for (int i = 0; i < count; i++) {
       final levelId = startId + i;
       final difficulty = LevelParameters.calculateProgressiveDifficulty(i, startDifficulty);
-      final containerCount = LevelParameters.calculateContainerCount(difficulty);
-      final colorCount = LevelParameters.calculateColorCount(difficulty, containerCount);
       final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
+      final emptySlots = LevelParameters.calculateEmptySlots(difficulty, containerCapacity);
+      
+      // Calculate containerCount from emptySlots to determine colorCount
+      final containerCount = (emptySlots / containerCapacity).ceil() + 2; // Minimum 2 colors
+      final colorCount = LevelParameters.calculateColorCount(difficulty, containerCount);
 
       final level = generateLevel(
         levelId,
         difficulty,
-        containerCount,
         colorCount,
         containerCapacity,
+        emptySlots,
       );
       levels.add(level);
     }
@@ -170,16 +177,42 @@ class ReverseLevelGenerator implements LevelGenerator {
   }
 
   /// Create a solved puzzle state
-  /// Each color gets its own container, filled to capacity
+  /// Each color gets its own container, filled based on emptySlots
+  /// If emptySlots < containerCapacity, reduce the last S colors by 1 slot each
   /// Remaining containers are left empty
   List<Container> _createSolvedState(
     int containerCount,
     List<LiquidColor> colors,
     int containerCapacity,
+    int emptySlots,
   ) {
     final containers = <Container>[];
 
-    // Create one full container per color
+    // Calculate how much liquid per color
+    // If emptySlots < containerCapacity, reduce the last S colors by 1 slot each
+    final colorVolumes = <int>[];
+    
+    if (emptySlots < containerCapacity) {
+      // We need to reduce some colors by 1 slot
+      final colorsToReduce = emptySlots;
+      
+      for (int i = 0; i < colors.length; i++) {
+        if (i >= colors.length - colorsToReduce) {
+          // This is one of the last S colors, reduce by 1
+          colorVolumes.add(containerCapacity - 1);
+        } else {
+          // Full container capacity for this color
+          colorVolumes.add(containerCapacity);
+        }
+      }
+    } else {
+      // All colors get full container capacity
+      for (int i = 0; i < colors.length; i++) {
+        colorVolumes.add(containerCapacity);
+      }
+    }
+
+    // Create one container per color with the calculated volume
     for (int i = 0; i < colors.length; i++) {
       containers.add(
         Container(
@@ -188,7 +221,7 @@ class ReverseLevelGenerator implements LevelGenerator {
           liquidLayers: [
             LiquidLayer(
               color: colors[i],
-              volume: containerCapacity,
+              volume: colorVolumes[i],
             ),
           ],
         ),

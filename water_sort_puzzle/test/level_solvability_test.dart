@@ -140,9 +140,9 @@ void main() {
         final level = generator.generateLevel(
           i,
           1 + i, // difficulty 1-3
-          4, // 4 containers (keep it simple)
           2, // 2 colors
           4, // containerCapacity
+          8, // emptySlots
         );
 
         expect(generator.validateLevel(level), isTrue,

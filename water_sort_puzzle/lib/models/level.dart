@@ -99,8 +99,8 @@ class Level {
     // Base score from difficulty
     score += difficulty * 10;
     
-    // Add points for more containers
-    score += containerCount * 2;
+    // // Add points for more containers
+    // score += containerCount * 2;
     
     // Add points for more colors
     score += colorCount * 5;
