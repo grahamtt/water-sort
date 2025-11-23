@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../services/dependency_injection.dart';
 import '../services/test_mode_manager.dart';
-import '../services/progress_override.dart';
+import '../services/progress_notifier.dart';
 import '../widgets/test_mode_indicator_widget.dart';
 import '../widgets/test_mode_toggle.dart';
 import '../widgets/level_grid.dart';
@@ -24,10 +23,10 @@ class _LevelSelectionScreenState extends State<LevelSelectionScreen> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           // Progress indicator
-          Consumer<ProgressOverride>(
-            builder: (context, progressOverride, child) {
-              final completedCount = progressOverride.completedLevels.length;
-              final totalCount = progressOverride.getEffectiveUnlockedLevels().length;
+          Consumer<ProgressNotifier>(
+            builder: (context, progressNotifier, child) {
+              final completedCount = progressNotifier.completedLevels.length;
+              final totalCount = progressNotifier.getEffectiveUnlockedLevels().length;
               final displayTotal = totalCount > 100 ? 100 : totalCount; // Cap display at 100
               
               return Padding(
@@ -73,10 +72,10 @@ class _LevelSelectionScreenState extends State<LevelSelectionScreen> {
             },
           ),
           // Progress bar
-          Consumer<ProgressOverride>(
-            builder: (context, progressOverride, child) {
-              final completedCount = progressOverride.completedLevels.length;
-              final unlockedCount = progressOverride.getEffectiveUnlockedLevels().length;
+          Consumer<ProgressNotifier>(
+            builder: (context, progressNotifier, child) {
+              final completedCount = progressNotifier.completedLevels.length;
+              final unlockedCount = progressNotifier.getEffectiveUnlockedLevels().length;
               final displayTotal = unlockedCount > 100 ? 100 : unlockedCount; // Cap display at 100
               final progress = displayTotal > 0 ? completedCount / displayTotal : 0.0;
               
@@ -104,10 +103,10 @@ class _LevelSelectionScreenState extends State<LevelSelectionScreen> {
           ),
           // Level grid
           Expanded(
-            child: Consumer2<ProgressOverride, TestModeManager>(
-              builder: (context, progressOverride, testModeManager, child) {
+            child: Consumer2<ProgressNotifier, TestModeManager>(
+              builder: (context, progressNotifier, testModeManager, child) {
                 return LevelGrid(
-                  progressOverride: progressOverride,
+                  progressOverride: progressNotifier.progressOverride,
                   testModeManager: testModeManager,
                 );
               },

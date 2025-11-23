@@ -4,6 +4,7 @@ import '../models/level.dart';
 import '../services/level_generator.dart';
 import '../services/progress_override.dart';
 import '../services/test_mode_manager.dart';
+import '../services/dependency_injection.dart';
 import '../screens/game_screen.dart';
 
 /// Widget that displays a grid of levels with test mode support
@@ -88,15 +89,18 @@ class LevelGrid extends StatelessWidget {
   }
 
   /// Handle level completion with test mode considerations
-  void _handleLevelCompletion(Level level, int moves, int timeInSeconds) {
+  Future<void> _handleLevelCompletion(Level level, int moves, int timeInSeconds) async {
     // The ProgressOverride will handle whether to record this completion
     // based on whether it was legitimately unlocked
-    progressOverride.completeLevel(
+    final updatedProgress = await progressOverride.completeLevel(
       levelId: level.id,
       moves: moves,
       timeInSeconds: timeInSeconds,
       minimumPossibleMoves: level.minimumMoves,
     );
+    
+    // Save the updated progress and refresh the ProgressOverride instance
+    await DependencyInjection.instance.updateGameProgress(updatedProgress);
   }
 }
 

@@ -3,6 +3,7 @@ import '../models/level.dart';
 import '../models/container.dart';
 import '../models/liquid_layer.dart';
 import '../models/liquid_color.dart';
+import '../utils/level_parameters.dart';
 import 'level_generator.dart';
 import 'level_similarity_checker.dart';
 
@@ -124,12 +125,13 @@ class LevelGenerationService {
 
   /// Check if a level is unique within the current session
   bool _isLevelUniqueInSession(Level candidate) {
-    if (_sessionLevels.isEmpty) return true;
+    return true;
+    // if (_sessionLevels.isEmpty) return true;
 
-    return !LevelSimilarityChecker.isLevelSimilarToAny(
-      candidate,
-      _sessionLevels,
-    );
+    // return !LevelSimilarityChecker.isLevelSimilarToAny(
+    //   candidate,
+    //   _sessionLevels,
+    // );
   }
 
   /// Handle the case where we cannot generate a unique level
@@ -314,8 +316,7 @@ class LevelGenerationService {
 
   /// Calculate color count based on difficulty and container count
   int _calculateColorCount(int difficulty, int containerCount, int baseColorCount) {
-    // Ensure we have at least one empty container for solving
-    final maxColors = containerCount - 1;
+    final maxColors = LevelParameters.calculateMaxColors(containerCount: containerCount);
     
     if (difficulty <= 2) return min(max(2, baseColorCount), maxColors);
     if (difficulty <= 4) return min(max(3, baseColorCount), maxColors);

@@ -12,6 +12,7 @@ import '../services/game_engine.dart';
 import '../services/level_generator.dart';
 import '../services/audio_manager.dart';
 import '../services/loss_detector.dart';
+import '../utils/level_parameters.dart';
 
 /// Enum representing different loading states for async operations
 enum GameLoadingState {
@@ -580,7 +581,7 @@ class GameStateProvider extends ChangeNotifier {
   int _calculateColorCountForLevel(int levelId) {
     final difficulty = _calculateDifficultyForLevel(levelId);
     final containerCount = _calculateContainerCountForLevel(levelId);
-    final maxColors = containerCount - 1; // Leave at least 1 empty container
+    final maxColors = LevelParameters.calculateMaxColors(containerCount: containerCount);
     
     if (difficulty <= 2) return 2.clamp(2, maxColors);
     if (difficulty <= 4) return 3.clamp(2, maxColors);

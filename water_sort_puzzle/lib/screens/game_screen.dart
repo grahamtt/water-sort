@@ -213,11 +213,14 @@ class _GameScreenState extends State<GameScreen> {
     try {
       // Get ProgressOverride from context and use it to handle completion (respects test mode)
       final progressOverride = context.read<ProgressOverride>();
-      await progressOverride.completeLevel(
+      final updatedProgress = await progressOverride.completeLevel(
         levelId: gameState.levelId,
         moves: gameState.effectiveMoveCount,
         timeInSeconds: timeInSeconds,
       );
+      
+      // Save the updated progress and refresh the ProgressOverride instance
+      await DependencyInjection.instance.updateGameProgress(updatedProgress);
     } catch (e) {
       // Handle completion error gracefully
       debugPrint('Error completing level: $e');

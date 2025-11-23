@@ -5,6 +5,7 @@ import '../storage/storage_service.dart';
 import '../storage/game_progress.dart';
 import '../services/test_mode_manager.dart';
 import '../services/progress_override.dart';
+import '../services/progress_notifier.dart';
 import '../services/level_generator.dart';
 import '../services/game_engine.dart';
 import '../services/audio_manager.dart';
@@ -28,6 +29,7 @@ class DependencyInjection {
   // State management
   GameProgress? _gameProgress;
   ProgressOverride? _progressOverride;
+  ProgressNotifier? _progressNotifier;
 
   bool _isInitialized = false;
 
@@ -61,6 +63,9 @@ class DependencyInjection {
 
       // Create progress override (depends on game progress and test mode manager)
       _progressOverride = ProgressOverride(_gameProgress!, _testModeManager!);
+
+      // Create progress notifier (wraps progress override for reactive updates)
+      _progressNotifier = ProgressNotifier(_progressOverride!);
 
       _isInitialized = true;
     } catch (e) {
@@ -116,6 +121,12 @@ class DependencyInjection {
     return _progressOverride!;
   }
 
+  /// Get ProgressNotifier instance
+  ProgressNotifier get progressNotifier {
+    _ensureInitialized();
+    return _progressNotifier!;
+  }
+
   /// Update game progress and refresh progress override
   Future<void> updateGameProgress(GameProgress newProgress) async {
     _ensureInitialized();
@@ -125,6 +136,9 @@ class DependencyInjection {
     
     // Recreate progress override with updated progress
     _progressOverride = ProgressOverride(_gameProgress!, _testModeManager!);
+    
+    // Update progress notifier to trigger UI updates
+    _progressNotifier!.updateProgress(_gameProgress!, _testModeManager!);
   }
 
   /// Create a GameStateProvider with all required dependencies
@@ -147,6 +161,9 @@ class DependencyInjection {
       // Close storage service
       await _storageService?.close();
 
+      // Dispose progress notifier
+      _progressNotifier?.dispose();
+
       // Reset all instances
       _sharedPreferences = null;
       _storageService = null;
@@ -156,6 +173,7 @@ class DependencyInjection {
       _audioManager = null;
       _gameProgress = null;
       _progressOverride = null;
+      _progressNotifier = null;
 
       _isInitialized = false;
     } catch (e) {
@@ -218,6 +236,7 @@ class DependencyProvider extends StatelessWidget {
         // Progress management
         Provider<GameProgress>.value(value: di.gameProgress),
         Provider<ProgressOverride>.value(value: di.progressOverride),
+        ChangeNotifierProvider<ProgressNotifier>.value(value: di.progressNotifier),
 
         // Game state provider (created fresh for each use)
         ChangeNotifierProvider<GameStateProvider>(

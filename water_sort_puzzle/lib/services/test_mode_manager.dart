@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/test_mode_indicator.dart';
 import '../models/level.dart';
+import '../utils/level_parameters.dart';
 import 'level_generator.dart';
 import 'test_mode_error_handler.dart';
 
@@ -167,8 +168,7 @@ class TestModeManager {
 
   /// Calculate color count for test mode based on difficulty and container count
   int _calculateTestModeColorCount(int difficulty, int containerCount) {
-    // In test mode, allow more aggressive color-to-container ratios
-    final maxColors = containerCount - 1; // Always leave room for at least one empty slot
+    final maxColors = LevelParameters.calculateMaxColors(containerCount: containerCount);
 
     if (difficulty <= 0) return min(2, maxColors);
     if (difficulty <= 2) return min(2, maxColors);

@@ -4,6 +4,7 @@ import '../models/container.dart';
 import '../models/liquid_layer.dart';
 import '../models/liquid_color.dart';
 import '../models/game_state.dart';
+import '../utils/level_parameters.dart';
 import 'game_engine.dart';
 import 'level_similarity_checker.dart';
 import 'level_validator.dart';
@@ -116,13 +117,21 @@ class WaterSortLevelGenerator implements LevelGenerator {
       // In test mode, allow more flexible parameter combinations
       if (!ignoreProgressionLimits) {
         // Check if we have enough containers for the colors and minimum empty slots
-        final totalLiquidVolume = colorCount * config.containerCapacity;
-        final totalCapacity = containerCount * config.containerCapacity;
-        if (totalCapacity - totalLiquidVolume < config.minEmptySlots) {
+        if (!LevelParameters.isValidConfiguration(
+          containerCount: containerCount,
+          colorCount: colorCount,
+          containerCapacity: config.containerCapacity,
+          minEmptySlots: config.minEmptySlots,
+        )) {
+          final minContainers = LevelParameters.calculateMinContainers(
+            colorCount: colorCount,
+            containerCapacity: config.containerCapacity,
+            minEmptySlots: config.minEmptySlots,
+          );
           throw ArgumentError(
             'Container count ($containerCount) is insufficient for $colorCount colors '
             'with minimum ${config.minEmptySlots} empty slots. '
-            'Need at least ${(totalLiquidVolume + config.minEmptySlots + config.containerCapacity - 1) ~/ config.containerCapacity} containers.',
+            'Need at least $minContainers containers.',
           );
         }
       } else {
@@ -705,10 +714,11 @@ class WaterSortLevelGenerator implements LevelGenerator {
 
   /// Calculate color count based on difficulty and container count
   int _calculateColorCount(int difficulty, int containerCount) {
-    // For harder levels, we can use more colors relative to containers
-    // but ensure we have at least one empty slot
-    final maxColors =
-        containerCount - 1; // Always leave room for at least one empty slot
+    final maxColors = LevelParameters.calculateMaxColors(
+      containerCount: containerCount,
+      containerCapacity: config.containerCapacity,
+      minEmptySlots: config.minEmptySlots,
+    );
 
     if (difficulty <= 2) return min(2, maxColors);
     if (difficulty <= 4) return min(3, maxColors);

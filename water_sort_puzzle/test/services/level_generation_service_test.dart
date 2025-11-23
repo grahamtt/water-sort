@@ -238,11 +238,11 @@ void main() {
 
     group('Basic Generation', () {
       test('should generate a level successfully', () async {
-        final level = await service.generateNextLevel(1, 1, 4, 2);
+        final level = await service.generateNextLevel(1, 1, 3, 2);
         
         expect(level.id, equals(1));
         expect(level.difficulty, equals(1));
-        expect(level.containerCount, equals(4));
+        expect(level.containerCount, equals(3));
         expect(level.colorCount, equals(2));
       });
 
