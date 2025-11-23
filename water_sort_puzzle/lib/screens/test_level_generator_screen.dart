@@ -212,8 +212,8 @@ class _TestLevelGeneratorScreenState extends State<TestLevelGeneratorScreen> {
               max: 10,
               divisions: 9,
               onChanged: (value) => setState(() => _colorCount = value.toInt()),
-              description: 'Number of different colors (1 for tutorial, containers = colors + ceil(emptySlots/capacity))',
-              recommendedValue: LevelParameters.calculateColorCount(_difficulty),
+              description: 'Number of different colors (1 for tutorial, containers = colors + floor(emptySlots/capacity))',
+              recommendedValue: LevelParameters.calculateColorCountForLevel(1),
             ),
 
             // Container capacity slider

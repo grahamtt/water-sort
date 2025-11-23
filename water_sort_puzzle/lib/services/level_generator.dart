@@ -332,7 +332,7 @@ class WaterSortLevelGenerator implements LevelGenerator {
       final emptySlots = LevelParameters.calculateEmptySlots(difficulty, containerCapacity);
       
       // Calculate colorCount based on difficulty
-      final colorCount = LevelParameters.calculateColorCount(difficulty);
+      final colorCount = LevelParameters.calculateColorCountForLevel(levelId);
 
       final level = generateLevel(
         levelId,

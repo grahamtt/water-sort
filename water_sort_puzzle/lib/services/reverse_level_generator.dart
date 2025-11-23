@@ -178,7 +178,7 @@ class ReverseLevelGenerator implements LevelGenerator {
       // Calculate colorCount based on difficulty
       // Ensure colorCount * containerCapacity > emptySlots for valid liquid volume
       final minColorCount = (emptySlots / containerCapacity).ceil() + 1;
-      final targetColorCount = LevelParameters.calculateColorCount(difficulty);
+      final targetColorCount = LevelParameters.calculateColorCountForLevel(levelId);
       final colorCount = targetColorCount.clamp(minColorCount, LiquidColor.values.length);
 
       final level = generateLevel(
