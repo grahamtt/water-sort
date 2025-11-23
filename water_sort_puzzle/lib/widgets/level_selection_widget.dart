@@ -18,6 +18,9 @@ class LevelSelectionWidget extends StatelessWidget {
   
   /// Spacing between grid items
   final double spacing;
+  
+  /// Whether test mode is enabled (unlocks all levels)
+  final bool testModeEnabled;
 
   const LevelSelectionWidget({
     super.key,
@@ -26,6 +29,7 @@ class LevelSelectionWidget extends StatelessWidget {
     required this.onLevelSelected,
     this.crossAxisCount = 4,
     this.spacing = 8.0,
+    this.testModeEnabled = false,
   });
 
   @override
@@ -46,6 +50,7 @@ class LevelSelectionWidget extends StatelessWidget {
             level: level,
             progress: progress,
             onTap: () => onLevelSelected(level),
+            testModeEnabled: testModeEnabled,
           );
         },
       ),
@@ -63,17 +68,22 @@ class LevelTile extends StatelessWidget {
   
   /// Callback when tile is tapped
   final VoidCallback onTap;
+  
+  /// Whether test mode is enabled (unlocks all levels)
+  final bool testModeEnabled;
 
   const LevelTile({
     super.key,
     required this.level,
     required this.progress,
     required this.onTap,
+    this.testModeEnabled = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isUnlocked = progress.isLevelUnlocked(level.id);
+    // In test mode, all levels are considered unlocked
+    final isUnlocked = testModeEnabled || progress.isLevelUnlocked(level.id);
     final isCompleted = progress.isLevelCompleted(level.id);
     final bestScore = progress.getBestScore(level.id);
     

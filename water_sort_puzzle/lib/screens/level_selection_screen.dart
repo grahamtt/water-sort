@@ -30,6 +30,7 @@ class _LevelSelectionScreenState extends State<LevelSelectionScreen> {
   late GameProgress _gameProgress;
   late List<Level> _availableLevels;
   bool _isLoading = true;
+  bool _testModeEnabled = false;
 
   @override
   void initState() {
@@ -69,7 +70,8 @@ class _LevelSelectionScreenState extends State<LevelSelectionScreen> {
 
   /// Handle level selection
   void _onLevelSelected(Level level) {
-    if (!_progressionManager.progress.isLevelUnlocked(level.id)) {
+    // Skip lock check if test mode is enabled
+    if (!_testModeEnabled && !_progressionManager.progress.isLevelUnlocked(level.id)) {
       _showLevelLockedDialog(level);
       return;
     }
@@ -185,6 +187,30 @@ class _LevelSelectionScreenState extends State<LevelSelectionScreen> {
         title: const Text('Select Level'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          // Test mode toggle
+          Tooltip(
+            message: 'Test Mode: Unlock all levels',
+            child: Row(
+              children: [
+                Text(
+                  'Test',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _testModeEnabled ? Colors.orange : Colors.grey,
+                  ),
+                ),
+                Switch(
+                  value: _testModeEnabled,
+                  onChanged: (value) {
+                    setState(() {
+                      _testModeEnabled = value;
+                    });
+                  },
+                  activeColor: Colors.orange,
+                ),
+              ],
+            ),
+          ),
           // Progress indicator
           Padding(
             padding: const EdgeInsets.all(16.0),
@@ -222,12 +248,32 @@ class _LevelSelectionScreenState extends State<LevelSelectionScreen> {
                     ],
                   ),
                 ),
+                // Test mode indicator
+                if (_testModeEnabled)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                    color: Colors.orange.withOpacity(0.2),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.warning, color: Colors.orange, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Test Mode: All levels unlocked',
+                          style: TextStyle(
+                            color: Colors.orange[800],
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 // Level grid
                 Expanded(
                   child: LevelSelectionWidget(
                     levels: _availableLevels,
                     progress: _progressionManager.progress,
                     onLevelSelected: _onLevelSelected,
+                    testModeEnabled: _testModeEnabled,
                   ),
                 ),
               ],
