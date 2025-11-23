@@ -37,37 +37,50 @@ class ReverseLevelGenerator implements LevelGenerator {
       );
     }
 
-    // Select colors for this level
-    final selectedColors = _selectColors(colorCount);
+    // Try generating a valid level with retries
+    const maxAttempts = 10;
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+      // Select colors for this level
+      final selectedColors = _selectColors(colorCount);
 
-    // Create the solved state
-    final solvedContainers = _createSolvedState(
-      containerCount,
-      selectedColors,
+      // Create the solved state
+      final solvedContainers = _createSolvedState(
+        containerCount,
+        selectedColors,
+      );
+
+      // Scramble the solved state using inverse operations
+      final scrambledContainers = _scramblePuzzle(
+        solvedContainers,
+        difficulty,
+        selectedColors,
+      );
+
+      // Create the level
+      final level = Level(
+        id: levelId,
+        difficulty: difficulty,
+        containerCount: containerCount,
+        colorCount: colorCount,
+        initialContainers: scrambledContainers,
+        tags: _generateTags(levelId, difficulty),
+      );
+
+      // Validate the level meets all requirements
+      if (LevelValidator.validateGeneratedLevel(level)) {
+        // Optimize by removing unnecessary empty containers
+        // This tests if the level can be solved with fewer empty containers
+        final optimizedLevel = LevelValidator.optimizeEmptyContainers(level);
+
+        return optimizedLevel;
+      }
+    }
+
+    // If we couldn't generate a valid level after max attempts, throw an error
+    throw StateError(
+      'Failed to generate valid level after $maxAttempts attempts. '
+      'Level $levelId with difficulty $difficulty, $containerCount containers, $colorCount colors.',
     );
-
-    // Scramble the solved state using inverse operations
-    final scrambledContainers = _scramblePuzzle(
-      solvedContainers,
-      difficulty,
-      selectedColors,
-    );
-
-    // Create the level
-    final level = Level(
-      id: levelId,
-      difficulty: difficulty,
-      containerCount: containerCount,
-      colorCount: colorCount,
-      initialContainers: scrambledContainers,
-      tags: _generateTags(levelId, difficulty),
-    );
-
-    // Optimize by removing unnecessary empty containers
-    // This tests if the level can be solved with fewer empty containers
-    final optimizedLevel = LevelValidator.optimizeEmptyContainers(level);
-
-    return optimizedLevel;
   }
 
   @override
@@ -85,8 +98,9 @@ class ReverseLevelGenerator implements LevelGenerator {
 
   @override
   bool validateLevel(Level level) {
-    // Levels generated through reverse-solving are guaranteed to be solvable
-    return level.isStructurallyValid;
+    // Use the full validation which checks for completed containers
+    // and other requirements, not just structural validity
+    return LevelValidator.validateGeneratedLevel(level);
   }
 
   @override

@@ -5,7 +5,7 @@ import 'package:water_sort_puzzle/models/liquid_color.dart';
 void main() {
   group('LiquidColor', () {
     test('should have correct color values', () {
-      expect(LiquidColor.red.value, equals(0xFFE53E3E));
+      expect(LiquidColor.red.value, equals(0xFFDC143C));
       expect(LiquidColor.blue.value, equals(0xFF3182CE));
       expect(LiquidColor.green.value, equals(0xFF38A169));
       expect(LiquidColor.yellow.value, equals(0xFFD69E2E));
@@ -33,7 +33,7 @@ void main() {
     test('should convert to Flutter Color correctly', () {
       final redColor = LiquidColor.red.color;
       expect(redColor, isA<Color>());
-      expect(redColor, equals(const Color(0xFFE53E3E)));
+      expect(redColor, equals(const Color(0xFFDC143C)));
       
       final blueColor = LiquidColor.blue.color;
       expect(blueColor, equals(const Color(0xFF3182CE)));

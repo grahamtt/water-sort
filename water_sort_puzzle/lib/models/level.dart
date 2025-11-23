@@ -133,8 +133,10 @@ class Level {
     final containerIds = initialContainers.map((c) => c.id).toSet();
     if (containerIds.length != containerCount) return false;
     
-    // Check that we have at least one empty container (needed for solving)
-    if (emptyContainerCount == 0) return false;
+    // Note: We don't require an empty container here because some puzzles
+    // can be solved without one (e.g., when you can pour directly between
+    // matching colors). The actual solvability check will determine if the
+    // level is truly solvable.
     
     // Count actual colors used
     final colorsUsed = <String>{};

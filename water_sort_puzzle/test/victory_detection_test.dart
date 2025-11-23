@@ -6,6 +6,8 @@ import 'package:water_sort_puzzle/models/liquid_layer.dart';
 import 'package:water_sort_puzzle/services/game_engine.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  
   group('Victory Detection Tests', () {
     late WaterSortGameEngine gameEngine;
     

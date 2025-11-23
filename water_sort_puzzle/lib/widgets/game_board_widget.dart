@@ -159,7 +159,7 @@ class _GameBoardWidgetState extends State<GameBoardWidget>
           liquidColor: pourSuccess.move.liquidMoved.color,
           volume: pourSuccess.move.liquidMoved.volume,
         );
-        _pourAnimationController.startPourAnimation(animation);
+        _pourAnimationController.addPourAnimation(animation);
       }
       
       // Update local state

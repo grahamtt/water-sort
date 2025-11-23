@@ -1,6 +1,9 @@
 import '../models/level.dart';
 import '../models/container.dart';
 import '../models/liquid_layer.dart';
+import '../models/game_state.dart';
+import '../services/game_engine.dart';
+import '../services/audio_manager.dart';
 
 /// Validates generated levels to ensure they meet all requirements
 class LevelValidator {
@@ -111,16 +114,18 @@ class LevelValidator {
     // Count empty containers
     final emptyContainers = level.initialContainers.where((c) => c.isEmpty).toList();
     
-    // If there's only one or no empty containers, we can't remove any
-    if (emptyContainers.length <= 1) {
+    // If there are no empty containers, nothing to optimize
+    if (emptyContainers.isEmpty) {
       return level;
     }
 
     // Try removing empty containers one by one and check if level is still solvable
     Level optimizedLevel = level;
     
-    // Start with removing one empty container and increase until we find the limit
-    for (int containersToRemove = 1; containersToRemove < emptyContainers.length; containersToRemove++) {
+    // Start with removing one empty container and increase until we try removing all
+    // Note: We try removing ALL empty containers (<=) because some puzzles can be
+    // solved without any empty containers
+    for (int containersToRemove = 1; containersToRemove <= emptyContainers.length; containersToRemove++) {
       final candidateContainers = <Container>[];
       int emptyContainersAdded = 0;
       
@@ -223,71 +228,223 @@ class LevelValidator {
     );
   }
 
-  /// Check if a level is solvable using heuristic analysis
+  /// Check if a level is actually solvable using BFS solver
   /// 
-  /// This implements a fast solvability check without requiring actual solving.
-  /// It uses structural analysis to determine if the level can theoretically be solved.
+  /// This implements an actual solvability test by attempting to solve the level.
+  /// Uses breadth-first search with optimizations for performance.
   static bool _isLevelSolvable(Level level) {
     // Basic structural validation first
     if (!level.isStructurallyValid) {
       return false;
     }
     
-    // Note: We allow levels with zero empty slots here, as some puzzles can be 
-    // solvable through strategic pouring even without empty containers initially.
-    // The actual solvability test will validate such cases.
+    // Note: We don't do a quick check for containerCount > colorCount here
+    // because some puzzles with containerCount == colorCount can be solved
+    // if they have the right configuration (e.g., one mixed container and
+    // the rest full of single colors). Let the BFS solver determine actual
+    // solvability.
     
-    // Analyze color distribution and volumes
-    final colorVolumes = <String, int>{};
-    final colorFragmentation = <String, int>{};
-    
-    for (final container in level.initialContainers) {
-      final colorsInContainer = <String>{};
-      
-      for (final layer in container.liquidLayers) {
-        final colorName = layer.color.name;
-        colorVolumes[colorName] = (colorVolumes[colorName] ?? 0) + layer.volume;
-        colorsInContainer.add(colorName);
+    try {
+      // Use a game engine without audio for testing
+      final gameEngine = WaterSortGameEngine(
+        audioManager: AudioManager(audioPlayer: MockAudioPlayer()),
+      );
+      final initialState = gameEngine.initializeLevel(
+        level.id,
+        level.initialContainers,
+      );
+
+      // Check if already solved (shouldn't happen, but safety check)
+      if (gameEngine.checkWinCondition(initialState)) {
+        return false; // Level is already solved, not a valid puzzle
       }
-      
-      // Count fragmentation (how many containers each color appears in)
-      for (final colorName in colorsInContainer) {
-        colorFragmentation[colorName] = (colorFragmentation[colorName] ?? 0) + 1;
-      }
-    }
-    
-    // Each color should have exactly one container's worth of liquid
-    // (assuming standard container capacity of 4)
-    const standardCapacity = 4;
-    for (final volume in colorVolumes.values) {
-      if (volume != standardCapacity) {
-        return false;
-      }
-    }
-    
-    // Check if we have enough containers to hold all colors when sorted
-    final colorsCount = colorVolumes.length;
-    final totalContainers = level.containerCount;
-    
-    // We need at least one empty slot for moves, so we need more containers than colors
-    if (totalContainers <= colorsCount) {
+
+      // Use optimized breadth-first search to test solvability
+      return _attemptSolveWithBFS(gameEngine, initialState);
+    } catch (e) {
+      // If any error occurs during solving attempt, consider it unsolvable
       return false;
     }
+  }
+
+  /// Attempt to solve the level using breadth-first search
+  /// Includes pruning, move ordering, and state limits to ensure performance
+  static bool _attemptSolveWithBFS(
+    WaterSortGameEngine gameEngine,
+    GameState initialState,
+  ) {
+    const maxStates = 5000; // Limit states to keep optimization fast
+    const maxDepth = 500; // Limit depth to prevent excessive search
     
-    // Heuristic: Check if colors are not too fragmented
-    // If a color is split across too many containers, it might be unsolvable
-    final maxAllowedFragmentation = (level.containerCount / 2).ceil();
-    for (final fragmentation in colorFragmentation.values) {
-      if (fragmentation > maxAllowedFragmentation) {
-        return false;
+    final visited = <String>{};
+    final queue = <_SearchNode>[_SearchNode(initialState, 0)];
+    int statesExplored = 0;
+
+    while (queue.isNotEmpty && statesExplored < maxStates) {
+      final node = queue.removeAt(0);
+      final currentState = node.state;
+      statesExplored++;
+
+      // Check if this state is solved
+      if (gameEngine.checkWinCondition(currentState)) {
+        return true; // Found a solution!
+      }
+
+      // Generate a state signature to avoid revisiting the same state
+      final stateSignature = _generateStateSignature(currentState);
+      if (visited.contains(stateSignature)) {
+        continue;
+      }
+      visited.add(stateSignature);
+
+      // Prune if depth is too large
+      if (node.depth > maxDepth) {
+        continue;
+      }
+
+      // Generate and prioritize moves
+      final moves = _generatePrioritizedMoves(gameEngine, currentState);
+
+      // Try all prioritized moves
+      for (final move in moves) {
+        try {
+          final newState = gameEngine.executePour(
+            currentState,
+            move.fromId,
+            move.toId,
+          );
+          
+          // Add to queue with incremented depth
+          queue.add(_SearchNode(newState, node.depth + 1));
+        } catch (e) {
+          // Skip invalid moves
+          continue;
+        }
       }
     }
-    
-    // Note: We allow levels with no empty space here, as the actual solvability
-    // test will determine if such levels are truly solvable through strategic moves.
-    // This heuristic check focuses on color distribution and fragmentation rather
-    // than requiring empty containers.
-    
-    return true;
+
+    // If we exhausted all possibilities without finding a solution
+    return false;
   }
+
+  /// Generate prioritized moves for better search efficiency
+  static List<_PrioritizedMove> _generatePrioritizedMoves(
+    WaterSortGameEngine gameEngine,
+    GameState currentState,
+  ) {
+    final moves = <_PrioritizedMove>[];
+
+    for (int fromId = 0; fromId < currentState.containers.length; fromId++) {
+      final fromContainer = currentState.containers[fromId];
+      if (fromContainer.isEmpty) continue;
+
+      for (int toId = 0; toId < currentState.containers.length; toId++) {
+        if (fromId == toId) continue;
+
+        final pourResult = gameEngine.validatePour(
+          currentState,
+          fromId,
+          toId,
+        );
+        
+        if (pourResult.isSuccess) {
+          final toContainer = currentState.containers[toId];
+          final priority = _calculateMovePriority(
+            fromContainer,
+            toContainer,
+            currentState,
+          );
+          moves.add(_PrioritizedMove(fromId, toId, priority));
+        }
+      }
+    }
+
+    // Sort by priority (higher priority first)
+    moves.sort((a, b) => b.priority.compareTo(a.priority));
+    return moves;
+  }
+
+  /// Calculate priority for a move (higher is better)
+  static int _calculateMovePriority(
+    Container fromContainer,
+    Container toContainer,
+    GameState state,
+  ) {
+    int priority = 0;
+
+    final topLayer = fromContainer.getTopContinuousLayer()!;
+
+    // High priority: Pouring into empty container
+    if (toContainer.isEmpty) {
+      priority += 100;
+      
+      // Even higher if this empties the source container
+      if (fromContainer.currentVolume == topLayer.volume) {
+        priority += 200;
+      }
+    }
+    // High priority: Pouring into same color
+    else if (toContainer.topColor == topLayer.color) {
+      priority += 150;
+      
+      // Bonus if this completes the target container
+      if (toContainer.remainingCapacity == topLayer.volume) {
+        priority += 100;
+      }
+      
+      // Bonus if this empties the source container
+      if (fromContainer.currentVolume == topLayer.volume) {
+        priority += 100;
+      }
+    }
+
+    // Bonus for consolidating (moving all of one color)
+    if (fromContainer.isSorted && !fromContainer.isFull) {
+      priority += 50;
+    }
+
+    // Penalty for breaking up sorted containers
+    if (fromContainer.isSorted && fromContainer.isFull) {
+      priority -= 50;
+    }
+
+    return priority;
+  }
+
+  /// Generate a unique signature for a game state to detect duplicates
+  static String _generateStateSignature(GameState gameState) {
+    final containerSignatures = <String>[];
+
+    for (final container in gameState.containers) {
+      if (container.isEmpty) {
+        containerSignatures.add('[empty]');
+      } else {
+        final layerSignatures = container.liquidLayers
+            .map((layer) => '${layer.color.name}:${layer.volume}')
+            .join(',');
+        containerSignatures.add('[$layerSignatures]');
+      }
+    }
+
+    // Sort container signatures to make the state signature order-independent
+    containerSignatures.sort();
+    return containerSignatures.join('|');
+  }
+}
+
+/// Helper class to track search state with depth for BFS
+class _SearchNode {
+  final GameState state;
+  final int depth;
+
+  _SearchNode(this.state, this.depth);
+}
+
+/// Helper class to represent a prioritized move
+class _PrioritizedMove {
+  final int fromId;
+  final int toId;
+  final int priority;
+
+  _PrioritizedMove(this.fromId, this.toId, this.priority);
 }
