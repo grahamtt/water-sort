@@ -26,6 +26,12 @@ abstract class GameEngine {
   
   /// Execute a validated pour operation and return the new game state
   GameState executePour(GameState currentState, int fromContainerId, int toContainerId);
+  
+  /// Check if any legal moves exist in the current game state
+  bool hasLegalMoves(GameState gameState);
+  
+  /// Check if the current game state represents a loss condition (no legal moves)
+  bool checkLossCondition(GameState gameState);
 }
 
 /// Concrete implementation of the game engine
@@ -175,7 +181,58 @@ class WaterSortGameEngine implements GameEngine {
       timestamp: DateTime.now(),
     );
     
-    // Return the new game state with the move added
-    return currentState.addMove(move, newContainers);
+    // Create the new game state with the move added
+    final newState = currentState.addMove(move, newContainers);
+    
+    // Check if the game is now in a lost state (no legal moves remaining)
+    final isLost = checkLossCondition(newState);
+    
+    // Return the new game state with loss condition updated
+    return newState.copyWith(isLost: isLost);
+  }
+  
+  @override
+  bool hasLegalMoves(GameState gameState) {
+    // If the game is already solved, no need to check for moves
+    if (gameState.isSolved) return false;
+    
+    // Try all possible combinations of source and target containers
+    for (final sourceContainer in gameState.containers) {
+      // Skip empty containers as they can't be poured from
+      if (sourceContainer.isEmpty) continue;
+      
+      // Skip containers that are already sorted and full
+      // (no point in pouring from a solved container)
+      if (sourceContainer.isSorted && sourceContainer.isFull) continue;
+      
+      for (final targetContainer in gameState.containers) {
+        // Skip if source and target are the same
+        if (sourceContainer.id == targetContainer.id) continue;
+        
+        // Check if this pour would be valid
+        final result = validatePour(
+          gameState,
+          sourceContainer.id,
+          targetContainer.id,
+        );
+        
+        if (result.isSuccess) {
+          // Found at least one legal move
+          return true;
+        }
+      }
+    }
+    
+    // No legal moves found
+    return false;
+  }
+  
+  @override
+  bool checkLossCondition(GameState gameState) {
+    // Game is not lost if it's already solved
+    if (gameState.isSolved) return false;
+    
+    // Game is lost if there are no legal moves remaining
+    return !hasLegalMoves(gameState);
   }
 }

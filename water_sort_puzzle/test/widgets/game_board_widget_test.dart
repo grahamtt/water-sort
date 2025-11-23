@@ -78,6 +78,18 @@ class MockGameEngine implements GameEngine {
     
     return currentState.addMove(move, currentState.containers);
   }
+  
+  @override
+  bool hasLegalMoves(GameState gameState) {
+    // Simple mock implementation - assume there are always legal moves
+    return true;
+  }
+  
+  @override
+  bool checkLossCondition(GameState gameState) {
+    // Simple mock implementation - assume game is never lost
+    return false;
+  }
 }
 
 void main() {

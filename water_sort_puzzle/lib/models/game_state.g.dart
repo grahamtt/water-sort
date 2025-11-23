@@ -18,6 +18,7 @@ GameState _$GameStateFromJson(Map<String, dynamic> json) => GameState(
           .map((e) => Move.fromJson(e as Map<String, dynamic>))
           .toList(),
       isCompleted: json['isCompleted'] as bool,
+      isLost: json['isLost'] as bool,
       moveCount: (json['moveCount'] as num).toInt(),
       currentMoveIndex: (json['currentMoveIndex'] as num).toInt(),
     );
@@ -29,6 +30,7 @@ Map<String, dynamic> _$GameStateToJson(GameState instance) => <String, dynamic>{
           instance.initialContainers.map((e) => e.toJson()).toList(),
       'moveHistory': instance.moveHistory.map((e) => e.toJson()).toList(),
       'isCompleted': instance.isCompleted,
+      'isLost': instance.isLost,
       'moveCount': instance.moveCount,
       'currentMoveIndex': instance.currentMoveIndex,
     };
