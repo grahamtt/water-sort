@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import '../models/level.dart';
 import '../models/container.dart';
 import '../models/liquid_layer.dart';
@@ -25,8 +26,13 @@ class ReverseLevelGenerator implements LevelGenerator {
     int containerCapacity,
     int emptySlots,
   ) {
-    // Calculate container count: colorCount + ceil(emptySlots / containerCapacity)
-    final containerCount = colorCount + (emptySlots / containerCapacity).ceil();
+    // Calculate containerCount for solved state:
+    // - Each color gets one container
+    // - Plus empty containers if emptySlots >= containerCapacity
+    final emptyContainerCount = emptySlots >= containerCapacity 
+        ? emptySlots ~/ containerCapacity 
+        : 0;
+    final containerCount = colorCount + emptyContainerCount;
 
     // Validate input parameters
     if (colorCount > LiquidColor.values.length) {
@@ -53,7 +59,7 @@ class ReverseLevelGenerator implements LevelGenerator {
       final selectedColors = _selectColors(colorCount);
 
       // Create the solved state
-      final solvedContainers = _createSolvedState(
+      final solvedContainers = createSolvedState(
         containerCount,
         selectedColors,
         containerCapacity,
@@ -166,9 +172,11 @@ class ReverseLevelGenerator implements LevelGenerator {
       final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
       final emptySlots = LevelParameters.calculateEmptySlots(difficulty, containerCapacity);
       
-      // Calculate containerCount from emptySlots to determine colorCount
-      final containerCount = (emptySlots / containerCapacity).ceil() + 2; // Minimum 2 colors
-      final colorCount = LevelParameters.calculateColorCount(difficulty, containerCount);
+      // Calculate colorCount based on difficulty
+      // Ensure colorCount * containerCapacity > emptySlots for valid liquid volume
+      final minColorCount = (emptySlots / containerCapacity).ceil() + 1;
+      final targetColorCount = LevelParameters.calculateColorCount(difficulty, minColorCount + 2);
+      final colorCount = targetColorCount.clamp(minColorCount, LiquidColor.values.length);
 
       final level = generateLevel(
         levelId,
@@ -203,10 +211,14 @@ class ReverseLevelGenerator implements LevelGenerator {
   }
 
   /// Create a solved puzzle state
-  /// Each color gets its own container, filled based on emptySlots
-  /// If emptySlots < containerCapacity, reduce the last S colors by 1 slot each
-  /// Remaining containers are left empty
-  List<Container> _createSolvedState(
+  /// Each color is placed in containers with emptySlots distributed optimally
+  /// The solved state should have exactly emptySlots total empty space
+  /// 
+  /// Strategy:
+  /// - If emptySlots < containerCapacity: distribute empty slots across colors (no empty containers)
+  /// - If emptySlots >= containerCapacity: each color gets full capacity, plus empty containers
+  @visibleForTesting
+  List<Container> createSolvedState(
     int containerCount,
     List<LiquidColor> colors,
     int containerCapacity,
@@ -214,55 +226,87 @@ class ReverseLevelGenerator implements LevelGenerator {
   ) {
     final containers = <Container>[];
 
-    // Calculate how much liquid per color
-    // If emptySlots < containerCapacity, reduce the last S colors by 1 slot each
-    final colorVolumes = <int>[];
-    
     if (emptySlots < containerCapacity) {
-      // We need to reduce some colors by 1 slot
-      final colorsToReduce = emptySlots;
+      // Distribute emptySlots across colors (no completely empty containers)
+      // Total liquid = colors.length * containerCapacity - emptySlots
+      final totalLiquid = colors.length * containerCapacity - emptySlots;
       
+      if (totalLiquid <= 0) {
+        throw ArgumentError(
+          'Invalid parameters: colorCount=${colors.length}, containerCapacity=$containerCapacity, '
+          'emptySlots=$emptySlots results in totalLiquid=$totalLiquid.'
+        );
+      }
+
+      // Distribute liquid evenly across colors
+      final baseVolumePerColor = totalLiquid ~/ colors.length;
+      final colorsWithExtra = totalLiquid % colors.length;
+
       for (int i = 0; i < colors.length; i++) {
-        if (i >= colors.length - colorsToReduce) {
-          // This is one of the last S colors, reduce by 1
-          colorVolumes.add(containerCapacity - 1);
-        } else {
-          // Full container capacity for this color
-          colorVolumes.add(containerCapacity);
-        }
+        final volume = i < colorsWithExtra 
+            ? baseVolumePerColor + 1 
+            : baseVolumePerColor;
+        
+        containers.add(
+          Container(
+            id: i,
+            capacity: containerCapacity,
+            liquidLayers: [
+              LiquidLayer(
+                color: colors[i],
+                volume: volume,
+              ),
+            ],
+          ),
+        );
       }
     } else {
-      // All colors get full container capacity
+      // emptySlots >= containerCapacity
+      // Each color gets full capacity, then add empty containers
+      final emptyContainerCount = emptySlots ~/ containerCapacity;
+      final remainingEmptySlots = emptySlots % containerCapacity;
+      
+      // Create one full container per color
       for (int i = 0; i < colors.length; i++) {
-        colorVolumes.add(containerCapacity);
+        containers.add(
+          Container(
+            id: i,
+            capacity: containerCapacity,
+            liquidLayers: [
+              LiquidLayer(
+                color: colors[i],
+                volume: containerCapacity,
+              ),
+            ],
+          ),
+        );
       }
-    }
-
-    // Create one container per color with the calculated volume
-    for (int i = 0; i < colors.length; i++) {
-      containers.add(
-        Container(
-          id: i,
+      
+      // Add completely empty containers
+      for (int i = 0; i < emptyContainerCount; i++) {
+        containers.add(
+          Container(
+            id: colors.length + i,
+            capacity: containerCapacity,
+            liquidLayers: [],
+          ),
+        );
+      }
+      
+      // If there are remaining empty slots, reduce the last color's volume
+      if (remainingEmptySlots > 0 && containers.isNotEmpty) {
+        final lastColorContainer = containers[colors.length - 1];
+        containers[colors.length - 1] = Container(
+          id: lastColorContainer.id,
           capacity: containerCapacity,
           liquidLayers: [
             LiquidLayer(
-              color: colors[i],
-              volume: colorVolumes[i],
+              color: lastColorContainer.liquidLayers.first.color,
+              volume: containerCapacity - remainingEmptySlots,
             ),
           ],
-        ),
-      );
-    }
-
-    // Create empty containers for the rest
-    for (int i = colors.length; i < containerCount; i++) {
-      containers.add(
-        Container(
-          id: i,
-          capacity: containerCapacity,
-          liquidLayers: [],
-        ),
-      );
+        );
+      }
     }
 
     return containers;
@@ -296,15 +340,20 @@ class ReverseLevelGenerator implements LevelGenerator {
     int attempts = 0;
     final maxAttempts = 1000; // Safety limit to prevent infinite loops
     int consecutiveFailures = 0;
-    final maxConsecutiveFailures = 10; // Exit if we can't make progress
+    const maxConsecutiveFailures = 10; // Exit if we can't make progress
+    int successfulMoves = 0;
+    
+    // Minimum moves based on difficulty to ensure puzzle is actually scrambled
+    final minMoves = (difficulty * 2).clamp(2, 20);
 
     // Continue scrambling until sufficiently mixed
     while (attempts < maxAttempts) {
       attempts++;
 
       // Check if we've reached the target scrambling level
+      // But ensure we've made at least the minimum number of moves
       final contiguousPercentage = _calculateContiguousPercentage(containers);
-      if (contiguousPercentage <= targetThreshold) {
+      if (successfulMoves >= minMoves && contiguousPercentage <= targetThreshold) {
         break;
       }
 
@@ -319,55 +368,13 @@ class ReverseLevelGenerator implements LevelGenerator {
         }
       } else {
         consecutiveFailures = 0;
+        successfulMoves++;
       }
     }
 
-    // Ensure we have at least one empty container
-    // If all containers have liquid, we need to move some liquid around
-    final emptyCount = containers.where((c) => c.isEmpty).length;
-    if (emptyCount == 0) {
-      // Find the container with the least liquid and empty it into others
-      containers.sort((a, b) => a.currentVolume.compareTo(b.currentVolume));
-      final toEmpty = containers.first;
-      
-      // Distribute its contents to other containers
-      while (toEmpty.liquidLayers.isNotEmpty) {
-        final layer = toEmpty.liquidLayers.removeLast();
-        bool placed = false;
-        
-        // Find a container with space
-        for (final target in containers) {
-          if (target != toEmpty && target.remainingCapacity >= layer.volume) {
-            target.liquidLayers.add(layer);
-            placed = true;
-            break;
-          }
-        }
-        
-        // If we couldn't place the layer anywhere, we need to split it or give up
-        if (!placed) {
-          // Try to split the layer and place parts in multiple containers
-          int remainingVolume = layer.volume;
-          for (final target in containers) {
-            if (target != toEmpty && target.remainingCapacity > 0) {
-              final volumeToPlace = min(remainingVolume, target.remainingCapacity);
-              target.liquidLayers.add(LiquidLayer(
-                color: layer.color,
-                volume: volumeToPlace,
-              ));
-              remainingVolume -= volumeToPlace;
-              if (remainingVolume == 0) break;
-            }
-          }
-          
-          // If we still have remaining volume, we can't empty this container
-          // Just break to avoid infinite loop
-          if (remainingVolume > 0) {
-            break;
-          }
-        }
-      }
-    }
+    // Note: We don't force an empty container here anymore.
+    // The solved state already has the correct number of empty slots as specified.
+    // If emptySlots < containerCapacity, we intentionally have no empty containers.
 
     // Reassign IDs to maintain order
     for (int i = 0; i < containers.length; i++) {

@@ -265,17 +265,15 @@ class WaterSortLevelGenerator implements LevelGenerator {
       }
     }
 
-    if (uniqueLevel == null) {
-      // Fallback: return a regular generated level if we can't find a unique one
-      // This ensures the game can continue even if similarity detection is too strict
-      uniqueLevel = generateLevel(
+    // Fallback: return a regular generated level if we can't find a unique one
+    // This ensures the game can continue even if similarity detection is too strict
+    uniqueLevel ??= generateLevel(
         levelId,
         difficulty,
         colorCount,
         containerCapacity,
         emptySlots,
       );
-    }
 
     return uniqueLevel;
   }
@@ -517,12 +515,6 @@ class WaterSortLevelGenerator implements LevelGenerator {
     }
   }
 
-
-  /// Validate that a generated level meets all requirements
-  bool _validateGeneratedLevel(Level level) {
-    return _validateGeneratedLevelWithDetails(level).isValid;
-  }
-
   /// Validate a generated level and return detailed failure information
   ValidationResult _validateGeneratedLevelWithDetails(Level level) {
     final failures = <String>[];
@@ -574,20 +566,6 @@ class WaterSortLevelGenerator implements LevelGenerator {
     return failures.isEmpty 
       ? ValidationResult.valid() 
       : ValidationResult.invalid(failures);
-  }
-
-  /// Check if the level is already in a solved state
-  bool _isLevelAlreadySolved(Level level) {
-    // A level is solved if all non-empty containers contain only one color
-    for (final container in level.initialContainers) {
-      if (!container.isEmpty && !container.isSorted) {
-        return false; // Found a mixed container, so not solved
-      }
-    }
-
-    // If we get here, all containers are either empty or sorted
-    // This means the level is already solved
-    return true;
   }
 
   /// Test if a level is actually solvable by attempting to solve it

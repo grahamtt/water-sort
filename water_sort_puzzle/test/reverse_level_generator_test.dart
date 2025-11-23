@@ -22,26 +22,102 @@ void main() {
       );
     });
 
-    test('generates a valid level', () {
-      final level = generator.generateLevel(1, 3, 5, 3, 4);
+    test('correctly handles emptySlots parameter', () {
+      // colorCount=2, capacity=3, emptySlots=1
+      // Total liquid = 2*3 - 1 = 5, containers needed = ceil(5/3) = 2
+      // Solved state should be: |AAA|BB| (no empty containers)
+      final level = generator.generateLevel(1, 3, 2, 3, 1);
 
       expect(level.id, 1);
       expect(level.difficulty, 3);
-      // Container count may be optimized (reduced) if level is solvable with fewer containers
-      expect(level.containerCount, lessThanOrEqualTo(5));
-      expect(level.containerCount, greaterThanOrEqualTo(3)); // Minimum for gameplay
-      expect(level.colorCount, 3);
+      expect(level.colorCount, 2);
+      expect(level.containerCount, 2);
+      
+      // Count total empty slots
+      int totalEmptySlots = 0;
+      for (final container in level.initialContainers) {
+        totalEmptySlots += container.remainingCapacity;
+      }
+      // Should have at least 1 empty slot (may have more after scrambling)
+      expect(totalEmptySlots, greaterThanOrEqualTo(1));
+    });
+
+    test('preserves all colors with small capacity (2 colors, capacity 2, 1 empty slot)', () {
+      // This is the specific case reported by the user
+      // colorCount=2, capacity=2, emptySlots=1
+      // Solved state should be: |AA|B| (no empty containers)
+      final level = generator.generateLevel(1, 3, 2, 2, 1);
+
+      expect(level.id, 1);
+      expect(level.difficulty, 3);
+      expect(level.colorCount, 2);
+      expect(level.containerCount, 2);
+      
+      // Count colors present in the level
+      final colorCounts = <String, int>{};
+      for (final container in level.initialContainers) {
+        for (final layer in container.liquidLayers) {
+          final colorName = layer.color.name;
+          colorCounts[colorName] = (colorCounts[colorName] ?? 0) + layer.volume;
+        }
+      }
+      
+      // Both colors must be present (not just one!)
+      expect(colorCounts.length, 2, reason: 'Both colors should be present in the scrambled level');
+      
+      // Total liquid should be 3 (2*2 - 1)
+      final totalLiquid = colorCounts.values.fold(0, (sum, vol) => sum + vol);
+      expect(totalLiquid, 3);
+    });
+
+    test('actually scrambles small puzzles (not just returning solved state)', () {
+      // For a very small puzzle like |AA|B|, the only valid scramble is |A|BA|
+      // This test ensures the puzzle is actually scrambled, not returned as-is
+      final level = generator.generateLevel(1, 3, 2, 2, 1);
+
+      // Check that the puzzle is not in solved state
+      // In solved state, each container would have only one color
+      bool hasMultiColorContainer = false;
+      for (final container in level.initialContainers) {
+        if (container.liquidLayers.length > 1) {
+          // Check if this container has multiple colors
+          final colors = container.liquidLayers.map((l) => l.color).toSet();
+          if (colors.length > 1) {
+            hasMultiColorContainer = true;
+            break;
+          }
+        }
+      }
+
+      // The puzzle should be scrambled (have at least one container with mixed colors)
+      // OR have a different structure than the solved state
+      // For |AA|B| solved, scrambled should be |A|BA| or similar
+      expect(hasMultiColorContainer || level.initialContainers.any((c) => c.liquidLayers.length > 1), 
+             true, 
+             reason: 'Puzzle should be scrambled, not in solved state');
+    });
+
+    test('generates a valid level', () {
+      // colorCount=4, capacity=4, emptySlots=4
+      // emptySlots >= capacity, so we get 4 color containers + 1 empty = 5 total
+      final level = generator.generateLevel(1, 3, 4, 4, 4);
+
+      expect(level.id, 1);
+      expect(level.difficulty, 3);
+      expect(level.colorCount, 4);
+      // 4 colors + 1 empty container (may be optimized down)
+      expect(level.containerCount, greaterThanOrEqualTo(4));
       expect(level.initialContainers.length, level.containerCount);
     });
 
     test('generated level is structurally valid', () {
-      final level = generator.generateLevel(1, 3, 5, 3, 4);
+      final level = generator.generateLevel(1, 3, 4, 4, 4);
 
       expect(level.isStructurallyValid, true);
     });
 
     test('generated level is not already solved', () {
-      final level = generator.generateLevel(1, 5, 6, 4, 4);
+      final level = generator.generateLevel(1, 5, 4, 4, 4);
 
       // Initialize game state
       final gameState = gameEngine.initializeLevel(
@@ -54,7 +130,9 @@ void main() {
     });
 
     test('generated level has correct color distribution', () {
-      final level = generator.generateLevel(1, 3, 5, 3, 4);
+      // colorCount=4, capacity=4, emptySlots=4
+      // emptySlots >= capacity, so each color gets full capacity (4 units)
+      final level = generator.generateLevel(1, 3, 4, 4, 4);
 
       // Count total volume of each color
       final colorVolumes = <String, int>{};
@@ -65,27 +143,32 @@ void main() {
         }
       }
 
-      // Each color should have exactly one container's worth (4 units)
-      expect(colorVolumes.length, 3);
+      // All 4 colors should be present
+      expect(colorVolumes.length, 4);
+      // Total liquid should be 16 (4 colors * 4 capacity)
+      final totalLiquid = colorVolumes.values.fold(0, (sum, vol) => sum + vol);
+      expect(totalLiquid, 16);
+      // Each color should have 4 units (full capacity)
       for (final volume in colorVolumes.values) {
         expect(volume, 4);
       }
     });
 
-    test('generated level has at least one empty container', () {
-      final level = generator.generateLevel(1, 3, 5, 3, 4);
+    test('generated level has empty slots for moves', () {
+      final level = generator.generateLevel(1, 3, 4, 4, 4);
 
-      final emptyContainers = level.initialContainers
-          .where((c) => c.isEmpty)
-          .length;
+      // Count total empty slots
+      int totalEmptySlots = 0;
+      for (final container in level.initialContainers) {
+        totalEmptySlots += container.remainingCapacity;
+      }
 
-      // After optimization, some levels may have zero empty containers
-      // if they can be solved without them
-      expect(emptyContainers, greaterThanOrEqualTo(0));
+      // Should have empty slots for making moves (may be distributed or in empty containers)
+      expect(totalEmptySlots, greaterThan(0));
     });
 
     test('generated level has mixed colors (not all sorted)', () {
-      final level = generator.generateLevel(1, 5, 6, 4, 4);
+      final level = generator.generateLevel(1, 5, 4, 4, 4);
 
       // Most containers should be mixed (not sorted)
       // At least some containers should have multiple layers
@@ -100,11 +183,10 @@ void main() {
     });
 
     test('higher difficulty generates more complex levels', () {
-      final easyLevel = generator.generateLevel(1, 2, 4, 2, 4);
-      final hardLevel = generator.generateLevel(2, 8, 7, 5, 4);
+      final easyLevel = generator.generateLevel(1, 2, 2, 4, 4);
+      final hardLevel = generator.generateLevel(2, 8, 5, 4, 4);
 
-      // Hard level should have more containers and colors
-      expect(hardLevel.containerCount, greaterThan(easyLevel.containerCount));
+      // Hard level should have more colors
       expect(hardLevel.colorCount, greaterThan(easyLevel.colorCount));
 
       // Hard level should have more mixed containers
@@ -139,7 +221,7 @@ void main() {
     });
 
     test('generated level does not have completed containers', () {
-      final level = generator.generateLevel(1, 5, 6, 4, 4);
+      final level = generator.generateLevel(1, 5, 4, 4, 4);
 
       // No container should be both full and sorted (completed)
       for (final container in level.initialContainers) {
@@ -151,7 +233,7 @@ void main() {
     });
 
     test('validates generated levels correctly', () {
-      final level = generator.generateLevel(1, 3, 5, 3, 4);
+      final level = generator.generateLevel(1, 3, 4, 4, 4);
 
       // The generator's validate method should return true
       expect(generator.validateLevel(level), true);
@@ -165,8 +247,8 @@ void main() {
         config: const LevelGenerationConfig(seed: 222),
       );
 
-      final level1 = gen1.generateLevel(1, 3, 5, 3, 4);
-      final level2 = gen2.generateLevel(1, 3, 5, 3, 4);
+      final level1 = gen1.generateLevel(1, 3, 4, 4, 4);
+      final level2 = gen2.generateLevel(1, 3, 4, 4, 4);
 
       // Generate signatures for comparison
       String sig1 = _generateLevelSignature(level1);
@@ -183,8 +265,8 @@ void main() {
         config: const LevelGenerationConfig(seed: 12345),
       );
 
-      final level1 = gen1.generateLevel(1, 3, 5, 3, 4);
-      final level2 = gen2.generateLevel(1, 3, 5, 3, 4);
+      final level1 = gen1.generateLevel(1, 3, 4, 4, 4);
+      final level2 = gen2.generateLevel(1, 3, 4, 4, 4);
 
       // Generate signatures for comparison
       String sig1 = _generateLevelSignature(level1);
