@@ -33,6 +33,7 @@ class MockLevelGenerator implements LevelGenerator {
     int difficulty,
     int containerCount,
     int colorCount,
+    int containerCapacity,
   ) {
     if (_shouldThrowError) {
       throw StateError('Mock generation error');
@@ -40,7 +41,7 @@ class MockLevelGenerator implements LevelGenerator {
 
     if (_predefinedLevels.isEmpty) {
       // Generate a simple test level
-      return _createTestLevel(levelId, difficulty, containerCount, colorCount);
+      return _createTestLevel(levelId, difficulty, containerCount, colorCount, containerCapacity);
     }
 
     // Return predefined levels in sequence, cycling if necessary
@@ -57,10 +58,11 @@ class MockLevelGenerator implements LevelGenerator {
     int difficulty,
     int containerCount,
     int colorCount,
+    int containerCapacity,
     List<Level> existingLevels,
   ) {
     // For testing, just delegate to generateLevel
-    return generateLevel(levelId, difficulty, containerCount, colorCount);
+    return generateLevel(levelId, difficulty, containerCount, colorCount, containerCapacity);
   }
 
   @override
@@ -80,12 +82,14 @@ class MockLevelGenerator implements LevelGenerator {
   List<Level> generateLevelSeries(int startId, int count, {int startDifficulty = 1}) {
     final levels = <Level>[];
     for (int i = 0; i < count; i++) {
-      levels.add(generateLevel(startId + i, startDifficulty, 4, 2));
+      final levelId = startId + i;
+      final containerCapacity = 4 + ((levelId - 1) ~/ 10);
+      levels.add(generateLevel(levelId, startDifficulty, 4, 2, containerCapacity));
     }
     return levels;
   }
 
-  Level _createTestLevel(int levelId, int difficulty, int containerCount, int colorCount) {
+  Level _createTestLevel(int levelId, int difficulty, int containerCount, int colorCount, int containerCapacity) {
     final containers = <Container>[];
     
     // Select colors for this level
@@ -106,26 +110,26 @@ class MockLevelGenerator implements LevelGenerator {
       switch (mixingPattern) {
         case 0:
           // Single color container
-          layers.add(LiquidLayer(color: color, volume: 4));
+          layers.add(LiquidLayer(color: color, volume: containerCapacity));
           break;
         case 1:
           // Split with another color
           final otherColor = selectedColors[(i + 1) % selectedColors.length];
-          layers.add(LiquidLayer(color: color, volume: 2));
-          layers.add(LiquidLayer(color: otherColor, volume: 2));
+          layers.add(LiquidLayer(color: color, volume: containerCapacity ~/ 2));
+          layers.add(LiquidLayer(color: otherColor, volume: containerCapacity ~/ 2));
           break;
         case 2:
           // Three segments
           final otherColor = selectedColors[(i + 1) % selectedColors.length];
           layers.add(LiquidLayer(color: color, volume: 1));
-          layers.add(LiquidLayer(color: otherColor, volume: 2));
+          layers.add(LiquidLayer(color: otherColor, volume: containerCapacity - 2));
           layers.add(LiquidLayer(color: color, volume: 1));
           break;
       }
       
       containers.add(Container(
         id: i,
-        capacity: 4,
+        capacity: containerCapacity,
         liquidLayers: layers,
       ));
     }
@@ -134,7 +138,7 @@ class MockLevelGenerator implements LevelGenerator {
     for (int i = colorCount; i < containerCount; i++) {
       containers.add(Container(
         id: i,
-        capacity: 4,
+        capacity: containerCapacity,
         liquidLayers: [],
       ));
     }

@@ -22,6 +22,7 @@ class ReverseLevelGenerator implements LevelGenerator {
     int difficulty,
     int containerCount,
     int colorCount,
+    int containerCapacity,
   ) {
     // Validate input parameters
     if (colorCount > LiquidColor.values.length) {
@@ -47,6 +48,7 @@ class ReverseLevelGenerator implements LevelGenerator {
       final solvedContainers = _createSolvedState(
         containerCount,
         selectedColors,
+        containerCapacity,
       );
 
       // Scramble the solved state using inverse operations
@@ -89,11 +91,12 @@ class ReverseLevelGenerator implements LevelGenerator {
     int difficulty,
     int containerCount,
     int colorCount,
+    int containerCapacity,
     List<Level> existingLevels,
   ) {
     // For now, just generate a level
     // TODO: Add uniqueness checking
-    return generateLevel(levelId, difficulty, containerCount, colorCount);
+    return generateLevel(levelId, difficulty, containerCount, colorCount, containerCapacity);
   }
 
   @override
@@ -128,12 +131,14 @@ class ReverseLevelGenerator implements LevelGenerator {
       final difficulty = _calculateProgressiveDifficulty(i, startDifficulty);
       final containerCount = _calculateContainerCount(difficulty);
       final colorCount = _calculateColorCount(difficulty, containerCount);
+      final containerCapacity = 4 + ((levelId - 1) ~/ 10);
 
       final level = generateLevel(
         levelId,
         difficulty,
         containerCount,
         colorCount,
+        containerCapacity,
       );
       levels.add(level);
     }
@@ -166,6 +171,7 @@ class ReverseLevelGenerator implements LevelGenerator {
   List<Container> _createSolvedState(
     int containerCount,
     List<LiquidColor> colors,
+    int containerCapacity,
   ) {
     final containers = <Container>[];
 
@@ -174,11 +180,11 @@ class ReverseLevelGenerator implements LevelGenerator {
       containers.add(
         Container(
           id: i,
-          capacity: config.containerCapacity,
+          capacity: containerCapacity,
           liquidLayers: [
             LiquidLayer(
               color: colors[i],
-              volume: config.containerCapacity,
+              volume: containerCapacity,
             ),
           ],
         ),
@@ -190,7 +196,7 @@ class ReverseLevelGenerator implements LevelGenerator {
       containers.add(
         Container(
           id: i,
-          capacity: config.containerCapacity,
+          capacity: containerCapacity,
           liquidLayers: [],
         ),
       );

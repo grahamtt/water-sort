@@ -87,8 +87,9 @@ class GameStateProvider extends ChangeNotifier {
       final difficulty = _calculateDifficultyForLevel(levelId);
       final containerCount = _calculateContainerCountForLevel(levelId);
       final colorCount = _calculateColorCountForLevel(levelId);
+      final containerCapacity = _calculateContainerCapacityForLevel(levelId);
       
-      final level = _levelGenerator.generateLevel(levelId, difficulty, containerCount, colorCount);
+      final level = _levelGenerator.generateLevel(levelId, difficulty, containerCount, colorCount, containerCapacity);
       
       // Initialize game state
       _currentGameState = _gameEngine.initializeLevel(levelId, level.initialContainers);
@@ -536,6 +537,11 @@ class GameStateProvider extends ChangeNotifier {
     if (difficulty <= 6) return 4.clamp(2, maxColors);
     if (difficulty <= 8) return 5.clamp(2, maxColors);
     return 6.clamp(2, maxColors);
+  }
+  
+  int _calculateContainerCapacityForLevel(int levelId) {
+    // Base capacity is 4, increase by 1 every 10 levels
+    return 4 + ((levelId - 1) ~/ 10);
   }
   
   @override

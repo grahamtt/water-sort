@@ -17,7 +17,7 @@ void main() {
 
     test('should integrate empty container optimization into level generation', () {
       // Generate a level that would normally have multiple empty containers
-      final level = generator.generateLevel(1, 2, 6, 2); // Easy level with many containers
+      final level = generator.generateLevel(1, 2, 6, 2, 4); // Easy level with many containers
 
       // The optimization should have reduced the container count
       expect(level.containerCount, lessThanOrEqualTo(6));
@@ -124,7 +124,7 @@ void main() {
 
     test('should handle edge cases in optimization workflow', () {
       // Test with minimum containers (should not optimize)
-      final minimalLevel = generator.generateLevel(1, 1, 3, 2);
+      final minimalLevel = generator.generateLevel(1, 1, 3, 2, 4);
       expect(minimalLevel.containerCount, equals(3)); // Should not be reduced further
       
       // Test with no empty containers (should not change)

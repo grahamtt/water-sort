@@ -47,6 +47,7 @@ class LevelGenerationService {
   ) async {
     Level? uniqueLevel;
     int attempts = 0;
+    final containerCapacity = _calculateContainerCapacity(levelId);
 
     // Try to generate a unique level within the attempt limit
     while (uniqueLevel == null && attempts < maxUniqueGenerationAttempts) {
@@ -59,6 +60,7 @@ class LevelGenerationService {
           difficulty,
           containerCount,
           colorCount,
+          containerCapacity,
         );
 
         // Check if it's sufficiently different from session levels
@@ -146,11 +148,13 @@ class LevelGenerationService {
       
       // Try one more time with reduced history
       try {
+        final containerCapacity = _calculateContainerCapacity(levelId);
         final candidate = _generator.generateLevel(
           levelId,
           difficulty,
           containerCount,
           colorCount,
+          containerCapacity,
         );
         
         if (_isLevelUniqueInSession(candidate)) {
@@ -178,11 +182,13 @@ class LevelGenerationService {
     
     // Final fallback: generate a regular level without uniqueness constraints
     try {
+      final containerCapacity = _calculateContainerCapacity(levelId);
       final fallbackLevel = _generator.generateLevel(
         levelId,
         difficulty,
         containerCount,
         colorCount,
+        containerCapacity,
       );
       return fallbackLevel;
     } catch (e) {
@@ -210,11 +216,13 @@ class LevelGenerationService {
 
     for (final (newContainerCount, newColorCount) in variations) {
       try {
+        final containerCapacity = _calculateContainerCapacity(levelId);
         final candidate = _generator.generateLevel(
           levelId,
           difficulty,
           newContainerCount,
           newColorCount,
+          containerCapacity,
         );
         
         if (_isLevelUniqueInSession(candidate)) {
@@ -324,11 +332,17 @@ class LevelGenerationService {
     return min(max(6, baseColorCount), maxColors);
   }
 
+  /// Calculate container capacity based on level ID
+  int _calculateContainerCapacity(int levelId) {
+    // Base capacity is 4, increase by 1 every 10 levels
+    return 4 + ((levelId - 1) ~/ 10);
+  }
+
   /// Validate that the service is working correctly
   bool validateService() {
     try {
       // Test basic generation
-      final testLevel = _generator.generateLevel(999, 1, 4, 2);
+      final testLevel = _generator.generateLevel(999, 1, 4, 2, 4);
       if (testLevel.id != 999) return false;
 
       // Test uniqueness checking
@@ -350,6 +364,7 @@ class LevelGenerationService {
   Level _createMinimalLevel(int levelId, int difficulty, int containerCount, int colorCount) {
     // Import required models
     final containers = <Container>[];
+    final containerCapacity = _calculateContainerCapacity(levelId);
     
     // Create containers - first few with simple liquid patterns, rest empty
     for (int i = 0; i < containerCount; i++) {
@@ -358,13 +373,13 @@ class LevelGenerationService {
       if (i < colorCount) {
         // Create a simple single-color container
         final color = LiquidColor.values[i % LiquidColor.values.length];
-        layers.add(LiquidLayer(color: color, volume: 4));
+        layers.add(LiquidLayer(color: color, volume: containerCapacity));
       }
       // Remaining containers are empty
       
       containers.add(Container(
         id: i,
-        capacity: 4,
+        capacity: containerCapacity,
         liquidLayers: layers,
       ));
     }

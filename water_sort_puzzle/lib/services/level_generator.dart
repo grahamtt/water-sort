@@ -63,6 +63,7 @@ abstract class LevelGenerator {
     int difficulty,
     int containerCount,
     int colorCount,
+    int containerCapacity,
   );
 
   /// Generate a unique level that is not similar to existing levels
@@ -71,6 +72,7 @@ abstract class LevelGenerator {
     int difficulty,
     int containerCount,
     int colorCount,
+    int containerCapacity,
     List<Level> existingLevels,
   );
 
@@ -109,6 +111,7 @@ class WaterSortLevelGenerator implements LevelGenerator {
     int difficulty,
     int containerCount,
     int colorCount,
+    int containerCapacity,
   ) {
     // Validate input parameters
     if (colorCount > LiquidColor.values.length) {
@@ -118,13 +121,13 @@ class WaterSortLevelGenerator implements LevelGenerator {
     }
 
     // Check if we have enough containers for the colors and minimum empty slots
-    final totalLiquidVolume = colorCount * config.containerCapacity;
-    final totalCapacity = containerCount * config.containerCapacity;
+    final totalLiquidVolume = colorCount * containerCapacity;
+    final totalCapacity = containerCount * containerCapacity;
     if (totalCapacity - totalLiquidVolume < config.minEmptySlots) {
       throw ArgumentError(
         'Container count ($containerCount) is insufficient for $colorCount colors '
         'with minimum ${config.minEmptySlots} empty slots. '
-        'Need at least ${(totalLiquidVolume + config.minEmptySlots + config.containerCapacity - 1) ~/ config.containerCapacity} containers.',
+        'Need at least ${(totalLiquidVolume + config.minEmptySlots + containerCapacity - 1) ~/ containerCapacity} containers.',
       );
     }
 
@@ -144,6 +147,7 @@ class WaterSortLevelGenerator implements LevelGenerator {
           containerCount,
           selectedColors,
           difficulty,
+          containerCapacity,
         );
 
         // Create the level
@@ -174,7 +178,7 @@ class WaterSortLevelGenerator implements LevelGenerator {
       throw StateError(
         'Failed to generate valid level after ${config.maxGenerationAttempts} attempts. '
         'Try adjusting parameters: levelId=$levelId, difficulty=$difficulty, '
-        'containerCount=$containerCount, colorCount=$colorCount',
+        'containerCount=$containerCount, colorCount=$colorCount, containerCapacity=$containerCapacity',
       );
     }
 
@@ -187,6 +191,7 @@ class WaterSortLevelGenerator implements LevelGenerator {
     int difficulty,
     int containerCount,
     int colorCount,
+    int containerCapacity,
     List<Level> existingLevels,
   ) {
     Level? uniqueLevel;
@@ -202,6 +207,7 @@ class WaterSortLevelGenerator implements LevelGenerator {
         difficulty,
         containerCount,
         colorCount,
+        containerCapacity,
       );
 
       // Check if it's unique compared to existing levels
@@ -218,6 +224,7 @@ class WaterSortLevelGenerator implements LevelGenerator {
         difficulty,
         containerCount,
         colorCount,
+        containerCapacity,
       );
     }
 
@@ -274,12 +281,14 @@ class WaterSortLevelGenerator implements LevelGenerator {
       final difficulty = _calculateProgressiveDifficulty(i, startDifficulty);
       final containerCount = _calculateContainerCount(difficulty);
       final colorCount = _calculateColorCount(difficulty, containerCount);
+      final containerCapacity = 4 + ((levelId - 1) ~/ 10);
 
       final level = generateLevel(
         levelId,
         difficulty,
         containerCount,
         colorCount,
+        containerCapacity,
       );
       levels.add(level);
     }
@@ -305,24 +314,25 @@ class WaterSortLevelGenerator implements LevelGenerator {
     int containerCount,
     List<LiquidColor> colors,
     int difficulty,
+    int containerCapacity,
   ) {
     final containers = <Container>[];
 
     // Create all containers initially empty
     for (int i = 0; i < containerCount; i++) {
       containers.add(
-        Container(id: i, capacity: config.containerCapacity, liquidLayers: []),
+        Container(id: i, capacity: containerCapacity, liquidLayers: []),
       );
     }
 
     // Generate liquid for each color (one container's worth per color)
     final colorLiquids = <LiquidColor, List<LiquidLayer>>{};
     for (final color in colors) {
-      colorLiquids[color] = _generateLiquidForColor(color, difficulty);
+      colorLiquids[color] = _generateLiquidForColor(color, difficulty, containerCapacity);
     }
 
     // Distribute liquids ensuring we maintain empty slots
-    _distributeLiquidsWithEmptySlots(containers, colorLiquids, difficulty);
+    _distributeLiquidsWithEmptySlots(containers, colorLiquids, difficulty, containerCapacity);
 
     // Shuffle containers to randomize positions
     containers.shuffle(_random);
@@ -340,6 +350,7 @@ class WaterSortLevelGenerator implements LevelGenerator {
     List<Container> containers,
     Map<LiquidColor, List<LiquidLayer>> colorLiquids,
     int difficulty,
+    int containerCapacity,
   ) {
     // Calculate total liquid volume
     int totalLiquidVolume = 0;
@@ -350,7 +361,7 @@ class WaterSortLevelGenerator implements LevelGenerator {
     }
 
     // Calculate total container capacity
-    final totalCapacity = containers.length * config.containerCapacity;
+    final totalCapacity = containers.length * containerCapacity;
 
     // Ensure we have enough empty slots
     final availableCapacity = totalCapacity - totalLiquidVolume;
@@ -370,6 +381,7 @@ class WaterSortLevelGenerator implements LevelGenerator {
     final targetEmptySlots = _calculateTargetEmptySlots(
       difficulty,
       availableCapacity,
+      containerCapacity,
     );
     final maxFillCapacity = totalCapacity - targetEmptySlots;
 
@@ -434,18 +446,18 @@ class WaterSortLevelGenerator implements LevelGenerator {
   }
 
   /// Calculate target empty slots based on difficulty
-  int _calculateTargetEmptySlots(int difficulty, int availableCapacity) {
+  int _calculateTargetEmptySlots(int difficulty, int availableCapacity, int containerCapacity) {
     if (difficulty <= 3) {
       // Easy levels: use more empty slots (up to 2 full containers worth)
-      return min(availableCapacity, config.containerCapacity * 2);
+      return min(availableCapacity, containerCapacity * 2);
     } else if (difficulty <= 6) {
       // Medium levels: moderate empty slots (up to 1.5 containers worth)
-      return min(availableCapacity, (config.containerCapacity * 1.5).round());
+      return min(availableCapacity, (containerCapacity * 1.5).round());
     } else {
       // Hard levels: minimum empty slots (but at least the required minimum)
       return max(
         config.minEmptySlots,
-        min(availableCapacity, config.containerCapacity),
+        min(availableCapacity, containerCapacity),
       );
     }
   }
@@ -679,7 +691,7 @@ class WaterSortLevelGenerator implements LevelGenerator {
   }
 
   /// Generate liquid layers for a specific color
-  List<LiquidLayer> _generateLiquidForColor(LiquidColor color, int difficulty) {
+  List<LiquidLayer> _generateLiquidForColor(LiquidColor color, int difficulty, int containerCapacity) {
     // Determine how many layers to split this color into
     int layerCount;
 
@@ -695,7 +707,7 @@ class WaterSortLevelGenerator implements LevelGenerator {
     }
 
     // Split the total volume into layers
-    final totalVolume = config.containerCapacity;
+    final totalVolume = containerCapacity;
     final layers = <LiquidLayer>[];
     int remainingVolume = totalVolume;
 
@@ -732,8 +744,13 @@ class WaterSortLevelGenerator implements LevelGenerator {
     }
 
     // Check that each color has exactly one container's worth
+    // Note: This check is now approximate since containerCapacity varies by level
+    // We'll allow some flexibility here
+    final expectedVolume = level.initialContainers.isNotEmpty 
+        ? level.initialContainers.first.capacity 
+        : 4;
     for (final volume in colorVolumes.values) {
-      if (volume != config.containerCapacity) {
+      if (volume != expectedVolume) {
         return false;
       }
     }

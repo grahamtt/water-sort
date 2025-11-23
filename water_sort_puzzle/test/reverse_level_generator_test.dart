@@ -23,7 +23,7 @@ void main() {
     });
 
     test('generates a valid level', () {
-      final level = generator.generateLevel(1, 3, 5, 3);
+      final level = generator.generateLevel(1, 3, 5, 3, 4);
 
       expect(level.id, 1);
       expect(level.difficulty, 3);
@@ -35,13 +35,13 @@ void main() {
     });
 
     test('generated level is structurally valid', () {
-      final level = generator.generateLevel(1, 3, 5, 3);
+      final level = generator.generateLevel(1, 3, 5, 3, 4);
 
       expect(level.isStructurallyValid, true);
     });
 
     test('generated level is not already solved', () {
-      final level = generator.generateLevel(1, 5, 6, 4);
+      final level = generator.generateLevel(1, 5, 6, 4, 4);
 
       // Initialize game state
       final gameState = gameEngine.initializeLevel(
@@ -54,7 +54,7 @@ void main() {
     });
 
     test('generated level has correct color distribution', () {
-      final level = generator.generateLevel(1, 3, 5, 3);
+      final level = generator.generateLevel(1, 3, 5, 3, 4);
 
       // Count total volume of each color
       final colorVolumes = <String, int>{};
@@ -73,7 +73,7 @@ void main() {
     });
 
     test('generated level has at least one empty container', () {
-      final level = generator.generateLevel(1, 3, 5, 3);
+      final level = generator.generateLevel(1, 3, 5, 3, 4);
 
       final emptyContainers = level.initialContainers
           .where((c) => c.isEmpty)
@@ -85,7 +85,7 @@ void main() {
     });
 
     test('generated level has mixed colors (not all sorted)', () {
-      final level = generator.generateLevel(1, 5, 6, 4);
+      final level = generator.generateLevel(1, 5, 6, 4, 4);
 
       // Most containers should be mixed (not sorted)
       // At least some containers should have multiple layers
@@ -100,8 +100,8 @@ void main() {
     });
 
     test('higher difficulty generates more complex levels', () {
-      final easyLevel = generator.generateLevel(1, 2, 4, 2);
-      final hardLevel = generator.generateLevel(2, 8, 7, 5);
+      final easyLevel = generator.generateLevel(1, 2, 4, 2, 4);
+      final hardLevel = generator.generateLevel(2, 8, 7, 5, 4);
 
       // Hard level should have more containers and colors
       expect(hardLevel.containerCount, greaterThan(easyLevel.containerCount));
@@ -139,7 +139,7 @@ void main() {
     });
 
     test('generated level does not have completed containers', () {
-      final level = generator.generateLevel(1, 5, 6, 4);
+      final level = generator.generateLevel(1, 5, 6, 4, 4);
 
       // No container should be both full and sorted (completed)
       for (final container in level.initialContainers) {
@@ -151,7 +151,7 @@ void main() {
     });
 
     test('validates generated levels correctly', () {
-      final level = generator.generateLevel(1, 3, 5, 3);
+      final level = generator.generateLevel(1, 3, 5, 3, 4);
 
       // The generator's validate method should return true
       expect(generator.validateLevel(level), true);
@@ -165,8 +165,8 @@ void main() {
         config: const LevelGenerationConfig(seed: 222),
       );
 
-      final level1 = gen1.generateLevel(1, 3, 5, 3);
-      final level2 = gen2.generateLevel(1, 3, 5, 3);
+      final level1 = gen1.generateLevel(1, 3, 5, 3, 4);
+      final level2 = gen2.generateLevel(1, 3, 5, 3, 4);
 
       // Generate signatures for comparison
       String sig1 = _generateLevelSignature(level1);
@@ -183,8 +183,8 @@ void main() {
         config: const LevelGenerationConfig(seed: 12345),
       );
 
-      final level1 = gen1.generateLevel(1, 3, 5, 3);
-      final level2 = gen2.generateLevel(1, 3, 5, 3);
+      final level1 = gen1.generateLevel(1, 3, 5, 3, 4);
+      final level2 = gen2.generateLevel(1, 3, 5, 3, 4);
 
       // Generate signatures for comparison
       String sig1 = _generateLevelSignature(level1);

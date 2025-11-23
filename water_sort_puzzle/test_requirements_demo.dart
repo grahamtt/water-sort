@@ -18,7 +18,7 @@ void main() {
     
     print('📋 Level $i (Difficulty: $difficulty, Containers: $containerCount, Colors: $colorCount)');
     
-    final level = generator.generateLevel(i, difficulty, containerCount, colorCount);
+    final level = generator.generateLevel(i, difficulty, containerCount, colorCount, 4);
     
     // ✅ Requirement 1: Level should never be initially solved
     final initialState = gameEngine.initializeLevel(level.id, level.initialContainers);

@@ -14,7 +14,7 @@ void main() {
 
       // Generate a level with extra containers
       // 6 containers for 3 colors means 3 empty containers initially
-      final level = generator.generateLevel(1, 5, 6, 3);
+      final level = generator.generateLevel(1, 5, 6, 3, 4);
 
       // After optimization, we should have fewer than 3 empty containers
       // (unless all 3 are actually needed)
@@ -42,7 +42,7 @@ void main() {
 
       // Generate multiple levels and verify they're all valid after optimization
       for (int i = 1; i <= 10; i++) {
-        final level = generator.generateLevel(i, 5, 7, 4);
+        final level = generator.generateLevel(i, 5, 7, 4, 4);
         
         // Should be structurally valid
         expect(level.isStructurallyValid, true,
@@ -65,7 +65,7 @@ void main() {
 
       // Generate a level with many extra containers
       // 8 containers for 4 colors = 4 empty containers initially
-      final level = generator.generateLevel(1, 3, 8, 4);
+      final level = generator.generateLevel(1, 3, 8, 4, 4);
 
       final emptyCount = level.initialContainers.where((c) => c.isEmpty).length;
       
@@ -87,7 +87,7 @@ void main() {
       );
 
       // Generate an easy level
-      final level = generator.generateLevel(1, 1, 5, 2);
+      final level = generator.generateLevel(1, 1, 5, 2, 4);
 
       // Easy levels with few colors should be optimized to use minimal containers
       expect(level.containerCount, lessThanOrEqualTo(5));

@@ -141,7 +141,8 @@ void main() {
           i,
           1 + i, // difficulty 1-3
           4, // 4 containers (keep it simple)
-          2, // 2 colors (keep it simple)
+          2, // 2 colors
+          4, // containerCapacity
         );
 
         expect(generator.validateLevel(level), isTrue,
