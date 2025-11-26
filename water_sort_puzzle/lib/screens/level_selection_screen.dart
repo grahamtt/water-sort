@@ -44,7 +44,7 @@ class _LevelSelectionScreenState extends State<LevelSelectionScreen> {
     _gameProgress = widget.initialProgress ?? GameProgress();
     
     // Initialize level generator
-    final levelGenerator = widget.levelGenerator ?? ReverseLevelGenerator();
+    final levelGenerator = widget.levelGenerator ?? ReverseLevelGenerator(config: LevelGenerationConfig(returnBest: true));
     
     // Generate initial levels (first 50 levels)
     _availableLevels = levelGenerator.generateLevelSeries(1, 50);

@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/game_state.dart';
 import '../models/level.dart';
 import '../services/game_engine.dart';
 import '../services/reverse_level_generator.dart';
+import '../services/hint_solver.dart';
 import '../providers/game_state_provider.dart';
 import '../widgets/container_widget.dart';
 import '../widgets/victory_animation.dart';
@@ -316,7 +318,7 @@ class _GameScreenState extends State<GameScreen> {
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                   children: [
-                                    // Undo button (duplicate for easy access)
+                                    // Undo button
                                     _ControlButton(
                                       icon: Icons.undo,
                                       label: 'Undo',
@@ -325,7 +327,16 @@ class _GameScreenState extends State<GameScreen> {
                                           : null,
                                       isEnabled: provider.canUndo && !provider.isAnimating && !_isPaused,
                                     ),
-                                    // Restart button (duplicate for easy access)
+                                    // Hint button
+                                    _ControlButton(
+                                      icon: provider.isComputingHint ? Icons.hourglass_empty : Icons.lightbulb_outline,
+                                      label: 'Hint',
+                                      onPressed: !provider.isAnimating && !_isPaused && !provider.isComputingHint
+                                          ? provider.requestHint
+                                          : null,
+                                      isEnabled: !provider.isAnimating && !_isPaused && !provider.isComputingHint,
+                                    ),
+                                    // Restart button
                                     _ControlButton(
                                       icon: Icons.refresh,
                                       label: 'Restart',
@@ -334,7 +345,7 @@ class _GameScreenState extends State<GameScreen> {
                                           : null,
                                       isEnabled: !provider.isAnimating && !_isPaused,
                                     ),
-                                    // Pause button (duplicate for easy access)
+                                    // Pause button
                                     _ControlButton(
                                       icon: _isPaused ? Icons.play_arrow : Icons.pause,
                                       label: _isPaused ? 'Resume' : 'Pause',
@@ -514,6 +525,19 @@ class _GameBoardSection extends StatelessWidget {
                     );
                   },
                 ),
+                // Hint arrow overlay (non-interactive)
+                if (provider.currentHint != null)
+                  IgnorePointer(
+                    child: _HintArrowOverlay(
+                      hint: provider.currentHint!,
+                      containerCount: containerCount,
+                      crossAxisCount: bestCrossAxisCount,
+                      spacing: spacing,
+                      padding: padding,
+                      containerWidth: containerWidth,
+                      containerHeight: bestContainerHeight,
+                    ),
+                  ),
                 // Pause overlay
                 if (isPaused)
                   Container(
@@ -554,5 +578,193 @@ class _GameBoardSection extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+/// Widget that draws an arrow from source to target container to show hint
+class _HintArrowOverlay extends StatefulWidget {
+  final HintMove hint;
+  final int containerCount;
+  final int crossAxisCount;
+  final double spacing;
+  final double padding;
+  final double containerWidth;
+  final double containerHeight;
+  
+  const _HintArrowOverlay({
+    required this.hint,
+    required this.containerCount,
+    required this.crossAxisCount,
+    required this.spacing,
+    required this.padding,
+    required this.containerWidth,
+    required this.containerHeight,
+  });
+
+  @override
+  State<_HintArrowOverlay> createState() => _HintArrowOverlayState();
+}
+
+class _HintArrowOverlayState extends State<_HintArrowOverlay> with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _opacityAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    )..repeat(reverse: true);
+    
+    _opacityAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _opacityAnimation,
+      builder: (context, child) {
+        return CustomPaint(
+          painter: _HintArrowPainter(
+            fromContainerId: widget.hint.fromContainerId,
+            toContainerId: widget.hint.toContainerId,
+            containerCount: widget.containerCount,
+            crossAxisCount: widget.crossAxisCount,
+            spacing: widget.spacing,
+            padding: widget.padding,
+            containerWidth: widget.containerWidth,
+            containerHeight: widget.containerHeight,
+            opacity: _opacityAnimation.value,
+          ),
+          child: Container(),
+        );
+      },
+    );
+  }
+}
+
+/// Custom painter that draws the hint arrow
+class _HintArrowPainter extends CustomPainter {
+  final int fromContainerId;
+  final int toContainerId;
+  final int containerCount;
+  final int crossAxisCount;
+  final double spacing;
+  final double padding;
+  final double containerWidth;
+  final double containerHeight;
+  final double opacity;
+  
+  _HintArrowPainter({
+    required this.fromContainerId,
+    required this.toContainerId,
+    required this.containerCount,
+    required this.crossAxisCount,
+    required this.spacing,
+    required this.padding,
+    required this.containerWidth,
+    required this.containerHeight,
+    required this.opacity,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Calculate positions of source and target containers
+    final fromPos = _getContainerCenter(fromContainerId);
+    final toPos = _getContainerCenter(toContainerId);
+    
+    // Draw curved arrow
+    final paint = Paint()
+      ..color = Colors.amber.withValues(alpha: opacity)
+      ..strokeWidth = 4.0
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    
+    // Create a curved path
+    final path = Path();
+    path.moveTo(fromPos.dx, fromPos.dy);
+    
+    // Calculate control point for curve (midpoint raised up)
+    final midX = (fromPos.dx + toPos.dx) / 2;
+    final midY = (fromPos.dy + toPos.dy) / 2;
+    final controlOffset = -50.0; // Curve upward
+    final controlPoint = Offset(midX, midY + controlOffset);
+    
+    // Draw quadratic bezier curve
+    path.quadraticBezierTo(
+      controlPoint.dx, controlPoint.dy,
+      toPos.dx, toPos.dy,
+    );
+    
+    canvas.drawPath(path, paint);
+    
+    // Draw arrowhead at target
+    _drawArrowhead(canvas, controlPoint, toPos, paint);
+    
+    // Draw pulsing circles at source and target
+    final circlePaint = Paint()
+      ..color = Colors.amber.withValues(alpha: opacity * 0.3)
+      ..style = PaintingStyle.fill;
+    
+    canvas.drawCircle(fromPos, 30, circlePaint);
+    canvas.drawCircle(toPos, 30, circlePaint);
+  }
+  
+  Offset _getContainerCenter(int containerId) {
+    // Calculate row and column from container ID
+    final row = containerId ~/ crossAxisCount;
+    final col = containerId % crossAxisCount;
+    
+    // Calculate center position
+    final x = padding + (col * (containerWidth + spacing)) + (containerWidth / 2);
+    final y = padding + (row * (containerHeight + spacing)) + (containerHeight / 2);
+    
+    return Offset(x, y);
+  }
+  
+  void _drawArrowhead(Canvas canvas, Offset control, Offset tip, Paint paint) {
+    // Calculate direction from control point to tip
+    final dx = tip.dx - control.dx;
+    final dy = tip.dy - control.dy;
+    final angle = atan2(dy, dx);
+    
+    // Arrowhead size
+    const arrowSize = 20.0;
+    const arrowAngle = pi / 6; // 30 degrees
+    
+    // Calculate arrowhead points
+    final point1 = Offset(
+      tip.dx - arrowSize * cos(angle - arrowAngle),
+      tip.dy - arrowSize * sin(angle - arrowAngle),
+    );
+    final point2 = Offset(
+      tip.dx - arrowSize * cos(angle + arrowAngle),
+      tip.dy - arrowSize * sin(angle + arrowAngle),
+    );
+    
+    // Draw filled arrowhead
+    final arrowPath = Path()
+      ..moveTo(tip.dx, tip.dy)
+      ..lineTo(point1.dx, point1.dy)
+      ..lineTo(point2.dx, point2.dy)
+      ..close();
+    
+    canvas.drawPath(arrowPath, paint..style = PaintingStyle.fill);
+  }
+
+  @override
+  bool shouldRepaint(_HintArrowPainter oldDelegate) {
+    return oldDelegate.opacity != opacity ||
+           oldDelegate.fromContainerId != fromContainerId ||
+           oldDelegate.toContainerId != toContainerId;
   }
 }

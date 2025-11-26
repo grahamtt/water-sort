@@ -12,6 +12,7 @@ import '../services/game_engine.dart';
 import '../services/level_generator.dart';
 import '../services/audio_manager.dart';
 import '../services/level_parameters.dart';
+import '../services/hint_solver.dart';
 
 /// Enum representing different loading states for async operations
 enum GameLoadingState {
@@ -37,6 +38,7 @@ class GameStateProvider extends ChangeNotifier {
   final LevelGenerator _levelGenerator;
   final AudioManager _audioManager = AudioManager();
   final AnimationQueue _animationQueue = AnimationQueue();
+  late final HintSolver _hintSolver;
 
   // Core game state
   GameState? _currentGameState;
@@ -48,6 +50,10 @@ class GameStateProvider extends ChangeNotifier {
   String? _errorMessage;
   String? _feedbackMessage;
   
+  // Hint state
+  HintMove? _currentHint;
+  bool _isComputingHint = false;
+  
   // Animation event subscription
   StreamSubscription<AnimationEvent>? _animationEventSubscription;
   
@@ -56,6 +62,9 @@ class GameStateProvider extends ChangeNotifier {
     required LevelGenerator levelGenerator,
   }) : _gameEngine = gameEngine,
        _levelGenerator = levelGenerator {
+    // Initialize hint solver
+    _hintSolver = HintSolver(_gameEngine);
+    
     // Listen to animation events
     _animationEventSubscription = _animationQueue.animationEvents.listen(_handleAnimationEvent);
   }
@@ -68,6 +77,8 @@ class GameStateProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   String? get feedbackMessage => _feedbackMessage;
   bool get isAnimating => _animationQueue.isAnimating;
+  HintMove? get currentHint => _currentHint;
+  bool get isComputingHint => _isComputingHint;
   
   // Convenience getters
   bool get isLoading => _loadingState != GameLoadingState.idle;
@@ -96,6 +107,7 @@ class GameStateProvider extends ChangeNotifier {
       _currentGameState = _gameEngine.initializeLevel(levelId, level.initialContainers);
       _setUIState(GameUIState.idle);
       _selectedContainerId = null;
+      _currentHint = null;
       
       _setLoadingState(GameLoadingState.idle);
       notifyListeners();
@@ -114,6 +126,7 @@ class GameStateProvider extends ChangeNotifier {
       _currentGameState = _gameEngine.initializeLevel(level.id, level.initialContainers);
       _setUIState(GameUIState.idle);
       _selectedContainerId = null;
+      _currentHint = null;
       
       _setLoadingState(GameLoadingState.idle);
       notifyListeners();
@@ -141,6 +154,9 @@ class GameStateProvider extends ChangeNotifier {
       
       // Attempt to pour from selected container to this container
       await _attemptPour(_selectedContainerId!, containerId);
+      
+      // Clear hint after a move is made
+      _currentHint = null;
       
     } catch (e) {
       _handleError('Error selecting container: ${e.toString()}');
@@ -280,6 +296,7 @@ class GameStateProvider extends ChangeNotifier {
       _setUIState(GameUIState.idle);
       _clearError();
       _clearFeedback();
+      _currentHint = null;
       
       _setLoadingState(GameLoadingState.idle);
       notifyListeners();
@@ -359,10 +376,48 @@ class GameStateProvider extends ChangeNotifier {
   
   /// Restart the current level
   Future<void> restartCurrentLevel() async {
-    if (_currentGameState == null) return;
+    await resetLevel();
+  }
+  
+  /// Request a hint for the current game state
+  Future<void> requestHint() async {
+    if (_currentGameState == null || isAnimating || _isComputingHint) return;
     
-    final currentLevelId = _currentGameState!.levelId;
-    await initializeLevel(currentLevelId);
+    try {
+      _isComputingHint = true;
+      notifyListeners();
+      
+      // Compute hint asynchronously to avoid blocking UI
+      final hint = await Future.microtask(() => _hintSolver.findBestMove(_currentGameState!));
+      
+      if (hint != null) {
+        _currentHint = hint;
+        _setFeedbackMessage('Hint: Pour from container ${hint.fromContainerId} to ${hint.toContainerId}');
+        _audioManager.lightHaptic();
+      } else {
+        _setFeedbackMessage('No hint available - puzzle may already be solved!');
+        _audioManager.playErrorSound();
+      }
+      
+      _isComputingHint = false;
+      notifyListeners();
+      
+      // Clear hint after a delay
+      Future.delayed(const Duration(seconds: 5), () {
+        _currentHint = null;
+        _clearFeedback();
+      });
+      
+    } catch (e) {
+      _isComputingHint = false;
+      _handleError('Error computing hint: ${e.toString()}');
+    }
+  }
+  
+  /// Clear the current hint
+  void clearHint() {
+    _currentHint = null;
+    notifyListeners();
   }
   
   // Private helper methods

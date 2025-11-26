@@ -26,6 +26,9 @@ class ReverseLevelGenerator implements LevelGenerator {
     int containerCapacity,
     int emptySlots,
   ) {
+    //Log parameters
+    print('Generating level $levelId with difficulty $difficulty, $colorCount colors, $containerCapacity capacity, $emptySlots empty slots');
+
     // Calculate containerCount for solved state:
     // - Each color gets one container
     // - Plus empty containers if emptySlots >= containerCapacity
@@ -124,7 +127,7 @@ class ReverseLevelGenerator implements LevelGenerator {
     // If we couldn't generate a valid level after max attempts, throw an error
     throw StateError(
       'Failed to generate valid level after $maxAttempts attempts. '
-      'Level $levelId with difficulty $difficulty, $containerCount containers, $colorCount colors.',
+      'Level level $levelId with difficulty $difficulty, $colorCount colors, $containerCapacity capacity, $emptySlots empty slots.',
     );
   }
 
@@ -173,13 +176,8 @@ class ReverseLevelGenerator implements LevelGenerator {
       final levelId = startId + i;
       final difficulty = LevelParameters.calculateProgressiveDifficulty(i, startDifficulty);
       final containerCapacity = LevelParameters.calculateContainerCapacity(levelId);
-      final emptySlots = LevelParameters.calculateEmptySlots(difficulty, containerCapacity);
-      
-      // Calculate colorCount based on difficulty
-      // Ensure colorCount * containerCapacity > emptySlots for valid liquid volume
-      final minColorCount = (emptySlots / containerCapacity).ceil() + 1;
-      final targetColorCount = LevelParameters.calculateColorCountForLevel(levelId);
-      final colorCount = targetColorCount.clamp(minColorCount, LiquidColor.values.length);
+      final emptySlots = LevelParameters.calculateEmptySlotsForLevel(levelId);
+      final colorCount = LevelParameters.calculateColorCountForLevel(levelId);
 
       final level = generateLevel(
         levelId,
@@ -296,19 +294,33 @@ class ReverseLevelGenerator implements LevelGenerator {
         );
       }
       
-      // If there are remaining empty slots, reduce the last color's volume
+      // If there are remaining empty slots, distribute them evenly across colors
       if (remainingEmptySlots > 0 && containers.isNotEmpty) {
-        final lastColorContainer = containers[colors.length - 1];
-        containers[colors.length - 1] = Container(
-          id: lastColorContainer.id,
-          capacity: containerCapacity,
-          liquidLayers: [
-            LiquidLayer(
-              color: lastColorContainer.liquidLayers.first.color,
-              volume: containerCapacity - remainingEmptySlots,
-            ),
-          ],
-        );
+        // Distribute the remaining empty slots as evenly as possible across all colors
+        // Calculate how many slots each color should lose
+        final slotsPerColor = remainingEmptySlots ~/ colors.length;
+        final extraSlots = remainingEmptySlots % colors.length;
+        
+        for (int i = 0; i < colors.length; i++) {
+          // Colors at the end get an extra slot if there's a remainder
+          final slotsToLose = i < colors.length - extraSlots 
+              ? slotsPerColor 
+              : slotsPerColor + 1;
+          
+          if (slotsToLose > 0) {
+            final colorContainer = containers[i];
+            containers[i] = Container(
+              id: colorContainer.id,
+              capacity: containerCapacity,
+              liquidLayers: [
+                LiquidLayer(
+                  color: colorContainer.liquidLayers.first.color,
+                  volume: containerCapacity - slotsToLose,
+                ),
+              ],
+            );
+          }
+        }
       }
     }
 
