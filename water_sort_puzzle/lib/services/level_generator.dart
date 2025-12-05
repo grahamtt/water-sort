@@ -57,6 +57,10 @@ class LevelGenerationConfig {
   /// When true, returns the best level found with validation failure metadata in tags
   final bool returnBest;
 
+  /// Whether to enable audit mode for detailed generation tracking
+  /// When true, records all steps in the generation process for debugging
+  final bool enableAuditMode;
+
   const LevelGenerationConfig({
     this.containerCapacity = 4,
     this.minEmptySlots = 1,
@@ -69,6 +73,7 @@ class LevelGenerationConfig {
     this.maxSolvabilityStates = 10000,
     this.enableActualSolvabilityTest = true,
     this.returnBest = false,
+    this.enableAuditMode = false,
   });
 }
 

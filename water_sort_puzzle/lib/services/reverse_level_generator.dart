@@ -7,6 +7,9 @@ import '../models/liquid_color.dart';
 import 'level_generator.dart';
 import 'level_validator.dart';
 import 'level_parameters.dart';
+import 'generation_audit.dart';
+import 'game_engine.dart';
+import 'audio_manager.dart';
 
 /// Generates levels using a reverse-solving approach.
 /// Starts with a solved puzzle and systematically scrambles it using
@@ -14,9 +17,13 @@ import 'level_parameters.dart';
 class ReverseLevelGenerator implements LevelGenerator {
   final LevelGenerationConfig config;
   final Random _random;
+  GenerationAudit? _lastAudit;
 
   ReverseLevelGenerator({this.config = const LevelGenerationConfig()})
       : _random = Random(config.seed);
+
+  /// Get the audit record from the last generation (if audit mode was enabled)
+  GenerationAudit? get lastAudit => _lastAudit;
 
   @override
   Level generateLevel(
@@ -57,6 +64,9 @@ class ReverseLevelGenerator implements LevelGenerator {
     int bestCandidateFailureCount = 999;
     const maxAttempts = 10;
     
+    // Clear previous audit
+    _lastAudit = null;
+    
     for (int attempt = 0; attempt < maxAttempts; attempt++) {
       // Select colors for this level
       final selectedColors = _selectColors(colorCount);
@@ -69,12 +79,28 @@ class ReverseLevelGenerator implements LevelGenerator {
         emptySlots,
       );
 
+      // Make a deep copy of solved state for audit (before scrambling modifies it)
+      final solvedStateForAudit = config.enableAuditMode
+          ? solvedContainers
+              .map((c) => Container(
+                    id: c.id,
+                    capacity: c.capacity,
+                    liquidLayers: c.liquidLayers
+                        .map((l) => LiquidLayer(color: l.color, volume: l.volume))
+                        .toList(),
+                  ))
+              .toList()
+          : <Container>[];
+
       // Scramble the solved state using inverse operations
-      final scrambledContainers = _scramblePuzzle(
+      final scrambleResult = _scramblePuzzle(
         solvedContainers,
         difficulty,
         selectedColors,
       );
+      final scrambledContainers = scrambleResult.containers;
+      final scrambleSteps = scrambleResult.steps;
+      final firstUnsolvableStep = scrambleResult.firstUnsolvableStep;
 
       // Create the level
       final level = Level(
@@ -89,18 +115,50 @@ class ReverseLevelGenerator implements LevelGenerator {
       // Validate the level meets all requirements
       final validationFailures = _validateWithDetails(level);
       
-      if (validationFailures.isEmpty) {
-        // Skip optimization for small capacities to avoid BFS solver issues
-        // Optimize by removing unnecessary empty containers only for larger capacities
-        Level validatedLevel;
-        if (containerCapacity >= 4) {
-          final optimizedLevel = LevelValidator.optimizeEmptyContainers(level);
-          validatedLevel = optimizedLevel;
-        } else {
-          validatedLevel = level;
+      // Check solvability if audit mode is enabled
+      bool isSolvable = false;
+      String? solvabilityError;
+      if (config.enableAuditMode) {
+        try {
+          isSolvable = LevelValidator.isLevelSolvable(level);
+        } catch (e) {
+          isSolvable = false;
+          solvabilityError = e.toString();
         }
-        // Mark the level as validated
-        validLevel = validatedLevel.copyWith(isValidated: true);
+      }
+      
+      // Record audit if enabled
+      if (config.enableAuditMode) {
+        _lastAudit = GenerationAudit(
+          levelId: levelId,
+          difficulty: difficulty,
+          colorCount: colorCount,
+          containerCapacity: containerCapacity,
+          emptySlots: emptySlots,
+          selectedColors: selectedColors,
+          solvedState: solvedStateForAudit,
+          scrambleSteps: scrambleSteps,
+          finalState: scrambledContainers
+              .map((c) => Container(
+                    id: c.id,
+                    capacity: c.capacity,
+                    liquidLayers: c.liquidLayers
+                        .map((l) => LiquidLayer(color: l.color, volume: l.volume))
+                        .toList(),
+                  ))
+              .toList(),
+          validationFailures: validationFailures,
+          isSolvable: isSolvable,
+          solvabilityError: solvabilityError,
+          firstUnsolvableStep: firstUnsolvableStep,
+        );
+      }
+      
+      if (validationFailures.isEmpty) {
+        // Don't optimize empty containers for reverse-generated levels
+        // The optimization can remove containers needed for solvability,
+        // and we've already generated the level with the correct number of empty slots
+        validLevel = level.copyWith(isValidated: true);
         break;
       } else if (config.returnBest) {
         // Track the best candidate (fewest failures)
@@ -330,7 +388,7 @@ class ReverseLevelGenerator implements LevelGenerator {
   /// Scramble a solved puzzle using inverse operations
   /// Continues scrambling until the puzzle is sufficiently mixed,
   /// as determined by the percentage of contiguous colors falling below a threshold
-  List<Container> _scramblePuzzle(
+  _ScrambleResult _scramblePuzzle(
     List<Container> solvedContainers,
     int difficulty,
     List<LiquidColor> colors,
@@ -361,6 +419,11 @@ class ReverseLevelGenerator implements LevelGenerator {
     // Minimum moves based on difficulty to ensure puzzle is actually scrambled
     final minMoves = (difficulty * 2).clamp(2, 20);
 
+    // Track scramble steps for audit
+    final scrambleSteps = <ScrambleStep>[];
+    int stepNumber = 0;
+    int? firstUnsolvableStep;
+
     // Continue scrambling until sufficiently mixed
     while (attempts < maxAttempts) {
       attempts++;
@@ -372,10 +435,23 @@ class ReverseLevelGenerator implements LevelGenerator {
         break;
       }
 
+      // Capture state before move for audit
+      final stateBefore = config.enableAuditMode
+          ? containers
+              .map((c) => Container(
+                    id: c.id,
+                    capacity: c.capacity,
+                    liquidLayers: c.liquidLayers
+                        .map((l) => LiquidLayer(color: l.color, volume: l.volume))
+                        .toList(),
+                  ))
+              .toList()
+          : <Container>[];
+
       // Try to perform a scrambling move
-      final moveSuccessful = _performRandomScrambleMove(containers, colors, stateHistory);
+      final moveResult = _performRandomScrambleMove(containers, colors, stateHistory);
       
-      if (!moveSuccessful) {
+      if (!moveResult.success) {
         consecutiveFailures++;
         if (consecutiveFailures >= maxConsecutiveFailures) {
           // Can't make more progress, accept current state
@@ -384,6 +460,86 @@ class ReverseLevelGenerator implements LevelGenerator {
       } else {
         consecutiveFailures = 0;
         successfulMoves++;
+        
+        // Record step for audit and check solvability
+        if (config.enableAuditMode && moveResult.move != null) {
+          stepNumber++;
+          final stateAfter = containers
+              .map((c) => Container(
+                    id: c.id,
+                    capacity: c.capacity,
+                    liquidLayers: c.liquidLayers
+                        .map((l) => LiquidLayer(color: l.color, volume: l.volume))
+                        .toList(),
+                  ))
+              .toList();
+          final newContiguousPercentage = _calculateContiguousPercentage(containers);
+          
+          // Check solvability after this step
+          bool? isSolvableAfterStep;
+          String? solvabilityError;
+          if (config.enableAuditMode) {
+            try {
+              // Create a temporary level to test solvability
+              final tempLevel = Level(
+                id: 0, // Temporary ID
+                difficulty: difficulty,
+                containerCount: containers.length,
+                colorCount: colors.length,
+                initialContainers: stateAfter,
+              );
+              
+              // Check if already solved - during scrambling, this is considered solvable
+              // (it's reachable from the solved state, it IS the solved state)
+              final gameEngine = WaterSortGameEngine(
+                audioManager: AudioManager(audioPlayer: MockAudioPlayer()),
+              );
+              final initialState = gameEngine.initializeLevel(
+                tempLevel.id,
+                tempLevel.initialContainers,
+              );
+              
+              if (gameEngine.checkWinCondition(initialState)) {
+                // Already solved - this is solvable (it's the solved state itself)
+                isSolvableAfterStep = true;
+              } else {
+                // Not solved yet - check if it can be solved
+                isSolvableAfterStep = LevelValidator.attemptSolveWithBFS(gameEngine, initialState);
+              }
+              
+              // Track the first step that makes it unsolvable (but not if it's already solved)
+              if (isSolvableAfterStep == false && firstUnsolvableStep == null) {
+                firstUnsolvableStep = stepNumber;
+              }
+            } catch (e) {
+              isSolvableAfterStep = false;
+              solvabilityError = e.toString();
+              if (firstUnsolvableStep == null) {
+                firstUnsolvableStep = stepNumber;
+              }
+            }
+          }
+          
+          final step = ScrambleStep(
+            stepNumber: stepNumber,
+            sourceContainerId: moveResult.move!.sourceId,
+            targetContainerId: moveResult.move!.targetId,
+            volume: moveResult.move!.volume,
+            type: moveResult.move!.type == _ScrambleMoveType.splitLayer
+                ? ScrambleMoveType.splitLayer
+                : ScrambleMoveType.moveEntireLayer,
+            stateBefore: stateBefore,
+            stateAfter: stateAfter,
+            contiguousPercentage: newContiguousPercentage,
+            isSolvableAfterStep: isSolvableAfterStep,
+            solvabilityError: solvabilityError,
+          );
+          
+          scrambleSteps.add(step);
+          
+          // Print state for debugging
+          print('Step $stepNumber: ${step.formatStateCompact(stateAfter)} ${isSolvableAfterStep == false ? "[UNSOLVABLE]" : ""}');
+        }
       }
     }
 
@@ -400,7 +556,11 @@ class ReverseLevelGenerator implements LevelGenerator {
       );
     }
 
-    return containers;
+    return _ScrambleResult(
+      containers: containers,
+      steps: scrambleSteps,
+      firstUnsolvableStep: firstUnsolvableStep,
+    );
   }
 
   /// Calculate the target scrambling threshold based on difficulty
@@ -464,8 +624,8 @@ class ReverseLevelGenerator implements LevelGenerator {
   }
 
   /// Perform a random scrambling move (inverse operation)
-  /// Returns true if a move was successfully performed
-  bool _performRandomScrambleMove(
+  /// Returns result indicating if a move was successfully performed
+  _MoveResult _performRandomScrambleMove(
     List<Container> containers,
     List<LiquidColor> colors,
     Set<String> stateHistory,
@@ -474,7 +634,7 @@ class ReverseLevelGenerator implements LevelGenerator {
     final possibleMoves = _getPossibleScrambleMoves(containers);
 
     if (possibleMoves.isEmpty) {
-      return false;
+      return _MoveResult(success: false);
     }
 
     // Shuffle and try moves until one succeeds
@@ -490,14 +650,22 @@ class ReverseLevelGenerator implements LevelGenerator {
         // Apply the move
         _applyContainerChanges(containers, newContainers);
         stateHistory.add(stateSignature);
-        return true;
+        return _MoveResult(success: true, move: move);
       }
     }
 
-    return false;
+    return _MoveResult(success: false);
   }
 
   /// Get all possible scrambling moves from the current state
+  /// 
+  /// Game moves (forward):
+  /// 1. Pour entire top continuous layer to matching color (layers merge)
+  /// 2. Pour entire top continuous layer to empty container
+  /// 
+  /// Inverse moves (scrambling):
+  /// 1. Split a layer and move portion to non-matching color or empty
+  /// 2. Move entire single-layer to non-matching color or empty
   List<_ScrambleMove> _getPossibleScrambleMoves(List<Container> containers) {
     final moves = <_ScrambleMove>[];
 
@@ -514,57 +682,51 @@ class ReverseLevelGenerator implements LevelGenerator {
 
         final target = containers[targetId];
 
-        // Inverse Move Type 1: Split a unified color
-        // Take some liquid from a sorted container and put it in an empty container
-        // This is the inverse of "pour from empty to matching color"
-        // We can ONLY place on empty containers since players cannot split colors
-        if (source.isSorted && source.liquidLayers.length == 1 && topLayer.volume > 1) {
-          final volumeToMove = _random.nextInt(topLayer.volume - 1) + 1;
+        // Inverse of game move 1: Split a merged layer
+        // Split the top layer and move a portion to a container with:
+        // - A different color on top, OR
+        // - Empty
+        // This is the inverse of pouring to matching color (which merges)
+        if (topLayer.volume > 1) {
+          // Can split and move to non-matching or empty
+          final canMoveToTarget = target.isEmpty || target.topColor != topLayer.color;
           
-          if (target.isEmpty && target.remainingCapacity >= volumeToMove) {
-            moves.add(_ScrambleMove(
-              sourceId: sourceId,
-              targetId: targetId,
-              volume: volumeToMove,
-              type: _ScrambleMoveType.splitUnified,
-            ));
+          if (canMoveToTarget) {
+            // Choose a random volume to split off (1 to volume-1)
+            final volumeToMove = _random.nextInt(topLayer.volume - 1) + 1;
+            
+            if (target.remainingCapacity >= volumeToMove) {
+              moves.add(_ScrambleMove(
+                sourceId: sourceId,
+                targetId: targetId,
+                volume: volumeToMove,
+                type: _ScrambleMoveType.splitLayer,
+              ));
+            }
           }
         }
 
-        // Inverse Move Type 2: Create mixture by moving to different color
-        // Take liquid from top and place on a container with a DIFFERENT color
-        // This creates the mixed state that needs to be solved
-        if (!target.isEmpty && target.topColor != topLayer.color) {
-          final volumeToMove = min(
-            topLayer.volume,
-            target.remainingCapacity,
-          );
+        // Inverse of game move 2: Move entire layer to create mixture
+        // This is the inverse of pouring the entire top continuous layer.
+        // IMPORTANT: MOVE_ENTIRE can only be used when the source container
+        // has only ONE color (isSorted). This is because:
+        // - If source has multiple colors, pouring moves the top continuous layer,
+        //   which is a SPLIT operation (not moving the entire container's content)
+        // - If source has only one color, pouring moves the entire layer,
+        //   which is a MOVE_ENTIRE operation
+        // Move it to a container with:
+        // - A different color on top, OR
+        // - Empty
+        // This is the inverse of pouring from a single-color container to empty or non-matching color
+        if (source.isSorted) {
+          final canMoveToTarget = target.isEmpty || target.topColor != topLayer.color;
           
-          if (volumeToMove > 0) {
+          if (canMoveToTarget && target.remainingCapacity >= topLayer.volume) {
             moves.add(_ScrambleMove(
               sourceId: sourceId,
               targetId: targetId,
-              volume: volumeToMove,
-              type: _ScrambleMoveType.createMixture,
-            ));
-          }
-        }
-
-        // Inverse Move Type 3: Move from empty-adjacent position
-        // If we have a container with multiple layers, we can move the top layer
-        // to an empty container (inverse of pouring from empty)
-        if (source.liquidLayers.length > 1 && target.isEmpty) {
-          final volumeToMove = min(
-            topLayer.volume,
-            target.remainingCapacity,
-          );
-          
-          if (volumeToMove > 0) {
-            moves.add(_ScrambleMove(
-              sourceId: sourceId,
-              targetId: targetId,
-              volume: volumeToMove,
-              type: _ScrambleMoveType.moveToEmpty,
+              volume: topLayer.volume,
+              type: _ScrambleMoveType.moveEntireLayer,
             ));
           }
         }
@@ -612,25 +774,16 @@ class ReverseLevelGenerator implements LevelGenerator {
     }
 
     // Add volume to target
-    if (target.isEmpty || target.topColor != topLayer.color) {
-      // Add as a new layer
-      target.liquidLayers.add(
-        LiquidLayer(
-          color: topLayer.color,
-          volume: move.volume,
-        ),
-      );
-    } else {
-      // Merge with existing top layer
-      final targetTopLayer = target.liquidLayers.last;
-      target.liquidLayers.removeLast();
-      target.liquidLayers.add(
-        LiquidLayer(
-          color: targetTopLayer.color,
-          volume: targetTopLayer.volume + move.volume,
-        ),
-      );
-    }
+    // CRITICAL: Never merge layers during scrambling!
+    // Each scramble move must create a distinct layer so it can be individually
+    // reversed by the player. If we merge, the player would pour the entire
+    // merged continuous layer, which is not the inverse of this single move.
+    target.liquidLayers.add(
+      LiquidLayer(
+        color: topLayer.color,
+        volume: move.volume,
+      ),
+    );
 
     return newContainers;
   }
@@ -742,16 +895,36 @@ class ReverseLevelGenerator implements LevelGenerator {
   }
 }
 
+/// Result of scrambling operation
+class _ScrambleResult {
+  final List<Container> containers;
+  final List<ScrambleStep> steps;
+  final int? firstUnsolvableStep;
+
+  _ScrambleResult({
+    required this.containers,
+    required this.steps,
+    this.firstUnsolvableStep,
+  });
+}
+
+/// Result of performing a scramble move
+class _MoveResult {
+  final bool success;
+  final _ScrambleMove? move;
+
+  _MoveResult({required this.success, this.move});
+}
+
 /// Types of scrambling moves (inverse operations)
 enum _ScrambleMoveType {
-  /// Split a unified color by moving some volume to another container
-  splitUnified,
+  /// Split a layer by moving a portion to non-matching or empty container
+  /// Inverse of pouring to matching color (which merges layers)
+  splitLayer,
   
-  /// Create a mixture by placing one color on top of a different color
-  createMixture,
-  
-  /// Move a layer to an empty container
-  moveToEmpty,
+  /// Move an entire layer to non-matching or empty container
+  /// Inverse of pouring from empty or from matching color
+  moveEntireLayer,
 }
 
 /// Represents a scrambling move

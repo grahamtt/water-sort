@@ -168,7 +168,7 @@ class LevelValidator {
       );
       
       // Check if the candidate level is still solvable
-      if (_isLevelSolvable(candidateLevel)) {
+      if (isLevelSolvable(candidateLevel)) {
         optimizedLevel = candidateLevel;
       } else {
         // Short-circuit: If removing this many containers makes it unsolvable,
@@ -248,7 +248,7 @@ class LevelValidator {
   /// 
   /// This implements an actual solvability test by attempting to solve the level.
   /// Uses breadth-first search with optimizations for performance.
-  static bool _isLevelSolvable(Level level) {
+  static bool isLevelSolvable(Level level) {
     // Basic structural validation first
     if (!level.isStructurallyValid) {
       return false;
@@ -276,7 +276,7 @@ class LevelValidator {
       }
 
       // Use optimized breadth-first search to test solvability
-      return _attemptSolveWithBFS(gameEngine, initialState);
+      return attemptSolveWithBFS(gameEngine, initialState);
     } catch (e) {
       // If any error occurs during solving attempt, consider it unsolvable
       return false;
@@ -285,7 +285,8 @@ class LevelValidator {
 
   /// Attempt to solve the level using breadth-first search
   /// Includes pruning, move ordering, and state limits to ensure performance
-  static bool _attemptSolveWithBFS(
+  /// This method can be used to check solvability without the "already solved" check
+  static bool attemptSolveWithBFS(
     WaterSortGameEngine gameEngine,
     GameState initialState,
   ) {
